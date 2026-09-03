@@ -1,0 +1,348 @@
+import { Department, SdgGoal, UserProfile, ProjectEvent, CurriculumIntegration, CampusMetric } from '../types';
+
+export const SDG_GOALS: SdgGoal[] = [
+  { number: 1, name: 'Yoksulluğa Son', shortName: 'Yoksulluğa Son', color: '#E5243B', iconName: 'HandCoins', description: 'Her tür yoksulluğu her yerde sona erdirmek' },
+  { number: 2, name: 'Açlığa Son', shortName: 'Açlığa Son', color: '#DDA63A', iconName: 'Utensils', description: 'Açlığı bitirmek, gıda güvenliğini sağlamak ve sürdürülebilir tarım' },
+  { number: 3, name: 'Sağlıklı ve Kaliteli Yaşam', shortName: 'Sağlık & Yaşam', color: '#4C9F38', iconName: 'HeartPulse', description: 'Sağlıklı yaşamları güvence altına almak' },
+  { number: 4, name: 'Nitelikli Eğitim', shortName: 'Nitelikli Eğitim', color: '#C5192D', iconName: 'GraduationCap', description: 'Kapsayıcı ve hakkaniyete dayanan nitelikli eğitimi sağlamak' },
+  { number: 5, name: 'Toplumsal Cinsiyet Eşitliği', shortName: 'Cinsiyet Eşitliği', color: '#FF3A21', iconName: 'Scale', description: 'Tüm kadınların ve kız çocuklarının güçlenmesi' },
+  { number: 6, name: 'Temiz Su ve Sanitasyon', shortName: 'Temiz Su', color: '#26BDE2', iconName: 'Droplets', description: 'Herkes için suyun ve sanitasyonun erişilebilirliği' },
+  { number: 7, name: 'Erişilebilir ve Temiz Enerji', shortName: 'Temiz Enerji', color: '#FCC30B', iconName: 'Zap', description: 'Herkes için güvenilir ve modern enerjiye erişim' },
+  { number: 8, name: 'İnsana Yakışır İş ve Ekonomik Büyüme', shortName: 'Ekonomik Büyüme', color: '#A21942', iconName: 'Briefcase', description: 'Sürdürülebilir ekonomik büyüme ve istihdam' },
+  { number: 9, name: 'Sanayi, Yenilikçilik ve Altyapı', shortName: 'Sanayi & Yenilik', color: '#FD6925', iconName: 'Factory', description: 'Dayanıklı altyapılar inşa etmek, inovasyonu teşvik' },
+  { number: 10, name: 'Eşitsizliklerin Azaltılması', shortName: 'Eşitsizlikleri Azalt', color: '#DD1367', iconName: 'EqualNot', description: 'Ülkeler içi ve arasındaki eşitsizlikleri azaltmak' },
+  { number: 11, name: 'Sürdürülebilir Şehirler ve Topluluklar', shortName: 'Sürdürülebilir Şehir', color: '#FD9D24', iconName: 'Building2', description: 'Şehirleri kapsayıcı, güvenli ve dayanıklı kılmak' },
+  { number: 12, name: 'Sorumlu Üretim ve Tüketim', shortName: 'Sorumlu Tüketim', color: '#BF8B2E', iconName: 'RefreshCw', description: 'Sürdürülebilir tüketim ve üretim kalıplarını sağlamak' },
+  { number: 13, name: 'İklim Eylemi', shortName: 'İklim Eylemi', color: '#3F7E44', iconName: 'Flame', description: 'İklim değişikliği ve etkileriyle mücadele etmek' },
+  { number: 14, name: 'Sudaki Yaşam', shortName: 'Sudaki Yaşam', color: '#0A97D9', iconName: 'Fish', description: 'Okyanusları, denizleri ve deniz kaynaklarını korumak' },
+  { number: 15, name: 'Karasal Yaşam', shortName: 'Karasal Yaşam', color: '#56C02B', iconName: 'Trees', description: 'Karasal ekosistemleri korumak ve iyileştirmek' },
+  { number: 16, name: 'Barış, Adalet ve Güçlü Kurumlar', shortName: 'Barış & Adalet', color: '#00689D', iconName: 'ShieldCheck', description: 'Barışçıl ve kapsayıcı toplumları teşvik etmek' },
+  { number: 17, name: 'Amaçlar İçin Ortaklıklar', shortName: 'Ortaklıklar', color: '#19486A', iconName: 'Share2', description: 'Küresel ortaklığı canlandırmak' },
+];
+
+export const DEPARTMENTS: Department[] = [
+  { id: 'dept-fen', name: 'Fen Bilimleri Bölümü', code: 'FEN', color: '#10b981', headName: 'Servet Battal' },
+  { id: 'dept-mat', name: 'Matematik Bölümü', code: 'MAT', color: '#8b5cf6', headName: 'Funda Akbulut Demirel' },
+  { id: 'dept-edb', name: 'Türk Dili ve Edebiyatı', code: 'EDB', color: '#eab308', headName: 'Pınar Usta Altıner' },
+  { id: 'dept-sos', name: 'Sosyal Bilimler', code: 'SOS', color: '#3b82f6', headName: 'Kadir Can Tunay' },
+  { id: 'dept-dil', name: 'Yabancı Diller Bölümü', code: 'DIL', color: '#ec4899', headName: 'Eda Nezihe Üçöz' },
+  { id: 'dept-uyg', name: 'Uygulamalı Dersler (Görsel Sanatlar, Müzik, Beden)', code: 'UYG', color: '#f97316', headName: 'Işıl Zaza Tozlu' },
+  { id: 'dept-pdr', name: 'Rehberlik ve Psikolojik Danışmanlık', code: 'PDR', color: '#06b6d4', headName: 'Özlem Sendan' },
+];
+
+export const MOCK_USERS: Record<string, UserProfile> = {
+  coordinator: {
+    id: 'user-coord',
+    name: 'Sürdürülebilirlik Koordinatörü',
+    email: 'surdurulebilirlik@erenkoyisik.k12.tr',
+    role: 'coordinator',
+    departmentId: 'dept-fen',
+    title: 'FMV Erenköy Işık Lisesi ve Fen Lisesi Sürdürülebilirlik Koordinatörlüğü',
+    avatar: '/logo.png',
+  },
+  dept_head: {
+    id: 'user-head-servet',
+    name: 'Servet Battal',
+    email: 'servet.battal@erenkoyisik.k12.tr',
+    role: 'dept_head',
+    departmentId: 'dept-fen',
+    title: 'Fen Bilimleri Bölüm Başkanı',
+    avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150&auto=format&fit=crop&q=80',
+  },
+  teacher: {
+    id: 'user-teacher-isik',
+    name: 'Işık Danışman Öğretmen',
+    email: 'ogretmen@erenkoyisik.k12.tr',
+    role: 'teacher',
+    departmentId: 'dept-fen',
+    title: 'Eko-Tim Danışman Öğretmeni',
+    avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80',
+  }
+};
+
+export const INITIAL_PROJECTS: ProjectEvent[] = [
+  {
+    id: 'proj-1',
+    title: 'Erenköy Işık Kampüsü Organik Kompost ve Sera Atölyesi',
+    description: 'Yemekhane organik sebze-meyve atıklarının kompost makinesinde işlenmesi ve okul bahçesinde kurulan sera alanında toprağa kazandırılması.',
+    departmentId: 'dept-fen',
+    advisorId: 'user-teacher-isik',
+    advisorName: 'Işık Danışman Öğretmen (Biyoloji)',
+    eventType: 'Atölye',
+    sdgGoals: [12, 13, 15],
+    targetGrades: ['9', '10', 'Hazırlık'],
+    startDate: '2026-03-12',
+    endDate: '2026-03-12',
+    location: 'Okul Bahçesi & Fen Laboratuvarı',
+    resourceNeeds: 'Kompost kutuları, koruyucu eldivenler, organik atık tartısı',
+    status: 'completed',
+    createdAt: '2026-02-15T10:00:00Z',
+    impactReport: {
+      id: 'rep-1',
+      projectId: 'proj-1',
+      actualParticipants: 84,
+      impactMetricValue: 180,
+      impactMetricUnit: 'kg organik atık komposta dönüştü',
+      evaluationNotes: 'Öğrenciler döngüsel ekonomi modelini doğrudan uyguladı. Elde edilen gübre okul sera bahçesindeki fidanlarda kullanıldı.',
+      photoUrls: [
+        'https://images.unsplash.com/photo-1584467735815-f778f274e296?w=400&auto=format&fit=crop&q=80'
+      ],
+      completedAt: '2026-03-14T14:30:00Z'
+    }
+  },
+  {
+    id: 'proj-2',
+    title: 'Güneş Enerjili Mini Telefon Şarj İstasyonu Prototipi',
+    description: 'Fen ve Matematik zümreleri işbirliğiyle bahçedeki dinlenme kamelyasına kurulacak 100W fotovoltaik güneş paneli ve şarj istasyonu projesi.',
+    departmentId: 'dept-fen',
+    advisorId: 'user-teacher-isik',
+    advisorName: 'Fizik & Fen Zümresi',
+    eventType: 'Atölye',
+    sdgGoals: [7, 9, 13],
+    targetGrades: ['10', '11', 'Fen Lisesi'],
+    startDate: '2026-04-18',
+    endDate: '2026-04-20',
+    location: 'Maker / Fen Atölyesi',
+    resourceNeeds: '100W Güneş paneli kiti, regülatör, USB çıkış üniteleri',
+    status: 'coordinator_approved',
+    createdAt: '2026-03-01T09:00:00Z'
+  },
+  {
+    id: 'proj-3',
+    title: 'FMV Işık "Tek Kullanımlık Plastiklere Veda" Kampanyası',
+    description: 'Okul kantininde ve yemekhanede pet şişe kullanımını sonlandırmak, matara kullanımını teşvik etmek amacıyla tasarlanan kampüs geneli bilinçlendirme projesi.',
+    departmentId: 'dept-fen',
+    advisorId: 'user-teacher-isik',
+    advisorName: 'Servet Battal Danışmanlığında',
+    eventType: 'Farkındalık Kampanyası',
+    sdgGoals: [12, 14],
+    targetGrades: ['Tüm Okul'],
+    startDate: '2026-05-02',
+    location: 'Kantin & Fuaye Alanı',
+    resourceNeeds: 'Afiş baskıları, 3 adet ek arıtmalı su sebili onayı',
+    status: 'submitted',
+    createdAt: '2026-09-02T11:20:00Z'
+  },
+  {
+    id: 'proj-4',
+    title: 'Edebiyat ve Çevre Etiği: "Doğa ile Diyalog" Deneme Yarışması',
+    description: 'Türk Dili ve Edebiyatı zümresi öncülüğünde iklim krizi, insan ve doğa ilişkisi temalı lise geneli yaratıcı yazı ve deneme yarışması.',
+    departmentId: 'dept-edb',
+    advisorId: 'user-teacher-isik',
+    advisorName: 'Pınar Usta Altıner (Edebiyat)',
+    eventType: 'Yarışma',
+    sdgGoals: [4, 12, 13],
+    targetGrades: ['9', '10', '11', '12'],
+    startDate: '2026-05-10',
+    location: 'Kütüphane & Konferans Salonu',
+    resourceNeeds: 'Yarışma şartnamesi basımı, jüri değerlendirme formu, ödül kitap setleri',
+    status: 'dept_approved',
+    createdAt: '2026-08-28T14:15:00Z'
+  },
+  {
+    id: 'proj-5',
+    title: 'Ekolojik Sanat: İleri Dönüşüm (Upcycling) Heykel Sergisi',
+    description: 'Uygulamalı Dersler zümresi koordinasyonunda kampüs atık malzemelerinden (tel, ahşap, karton, plastik) üretilen çevre temalı heykel ve resim sergisi.',
+    departmentId: 'dept-uyg',
+    advisorId: 'user-teacher-isik',
+    advisorName: 'Işıl Zaza Tozlu (Uygulamalı Dersler)',
+    eventType: 'Müfredat İçi Proje',
+    sdgGoals: [12, 15],
+    targetGrades: ['9', '10', '11'],
+    startDate: '2026-05-25',
+    location: 'Sanat Galerisi & Fuaye',
+    resourceNeeds: 'Sergi ayaklıkları, su bazlı boyalar, spot aydınlatma',
+    status: 'coordinator_approved',
+    createdAt: '2026-08-30T16:00:00Z'
+  },
+  {
+    id: 'proj-6',
+    title: 'Eko-Anksiyete ve Doğa Temelli İyi Oluş Semineri',
+    description: 'Rehberlik ve Psikolojik Danışmanlık servisi tarafından iklim krizinin gençler üzerindeki psikolojik etkilerini ele alan ve doğayla bağ kurmayı hedefleyen atölye.',
+    departmentId: 'dept-pdr',
+    advisorId: 'user-teacher-isik',
+    advisorName: 'Özlem Sendan (Rehberlik & PDR)',
+    eventType: 'Seminer / Konferans',
+    sdgGoals: [3, 4],
+    targetGrades: ['11', '12'],
+    startDate: '2026-06-02',
+    location: 'PDR Grup Çalışma Odası',
+    resourceNeeds: 'Minderler, rahatlama ses sistemi',
+    status: 'submitted',
+    createdAt: '2026-09-01T08:30:00Z'
+  }
+];
+
+export const INITIAL_CURRICULUM: CurriculumIntegration[] = [
+  {
+    id: 'curr-1',
+    departmentId: 'dept-fen',
+    teacherName: 'Servet Battal Zümresi (Kimya/Biyoloji)',
+    courseName: '10. Sınıf Kimya & Fen Lisesi',
+    gradeLevel: '10. Sınıf',
+    learningOutcome: 'Karışımların ayrılması teknikleri ve endüstriyel su arıtma yöntemlerinin incelenmesi.',
+    sdgGoals: [6, 12],
+    activityDescription: 'Öğrencilerin gri su arıtımı için kum, çakıl ve aktif karbon kullanarak mini filtreleme kolonları tasarlaması.',
+    studentCount: 165,
+    academicTerm: '2026-2027 Güz'
+  },
+  {
+    id: 'curr-2',
+    departmentId: 'dept-mat',
+    teacherName: 'Funda Akbulut Demirel (Matematik)',
+    courseName: '11. Sınıf Matematik & Veri Analitiği',
+    gradeLevel: '11. Sınıf',
+    learningOutcome: 'İstatistiksel verilerin grafikle gösterimi, trend analizi ve optimizasyon.',
+    sdgGoals: [7, 12],
+    activityDescription: 'Okulun son 2 yıllık elektrik ve su tüketim verilerinin matematiksel modellenmesi ve karbon azaltım oranlarının hesaplanması.',
+    studentCount: 140,
+    academicTerm: '2026-2027 Güz'
+  },
+  {
+    id: 'curr-3',
+    departmentId: 'dept-edb',
+    teacherName: 'Pınar Usta Altıner (Türk Dili ve Edebiyatı)',
+    courseName: '10. Sınıf Türk Dili ve Edebiyatı',
+    gradeLevel: '10. Sınıf',
+    learningOutcome: 'Edebi metinlerde doğa tasvirleri ve insanın çevreyle kurduğu ontolojik bağın çözümlenmesi.',
+    sdgGoals: [4, 15],
+    activityDescription: 'Sait Faik ve Yaşar Kemal metinlerinde doğa tahribatı üzerine eleştirel deneme yazımı.',
+    studentCount: 155,
+    academicTerm: '2026-2027 Güz'
+  },
+  {
+    id: 'curr-4',
+    departmentId: 'dept-sos',
+    teacherName: 'Kadir Can Tunay (Sosyal Bilimler / Coğrafya)',
+    courseName: '11. Sınıf Coğrafya',
+    gradeLevel: '11. Sınıf',
+    learningOutcome: 'Küresel iklim protokolleri, sera gazı emisyonları ve iklim mülteciliği olgusu.',
+    sdgGoals: [10, 13, 16],
+    activityDescription: 'Farklı coğrafi bölgelerdeki kuraklık ve su krizlerinin CBS (Coğrafi Bilgi Sistemleri) haritaları üzerinde analizi.',
+    studentCount: 130,
+    academicTerm: '2026-2027 Güz'
+  },
+  {
+    id: 'curr-5',
+    departmentId: 'dept-dil',
+    teacherName: 'Eda Nezihe Üçöz (Yabancı Diller)',
+    courseName: '10. Sınıf İleri İngilizce & MUN',
+    gradeLevel: '10. Sınıf',
+    learningOutcome: 'Global Environmental Treaties, Persuasive Writing and UN SDG Discourse.',
+    sdgGoals: [13, 17],
+    activityDescription: 'BM Çevre Programı (UNEP) formatında simülasyon oturumu ve sürdürülebilirlik manifestosu yazımı.',
+    studentCount: 180,
+    academicTerm: '2026-2027 Güz'
+  },
+  {
+    id: 'curr-6',
+    departmentId: 'dept-uyg',
+    teacherName: 'Işıl Zaza Tozlu (Uygulamalı Dersler / Görsel Sanatlar)',
+    courseName: '9. Sınıf Görsel Sanatlar',
+    gradeLevel: '9. Sınıf',
+    learningOutcome: 'Tasarım ilkeleri, çevre dostu malzeme seçimi ve ileri dönüşüm bilinci.',
+    sdgGoals: [12, 14],
+    activityDescription: 'Deniz kirliliğine dikkat çekmek için atık plastik kapaklardan mozaik pano üretimi.',
+    studentCount: 120,
+    academicTerm: '2026-2027 Güz'
+  },
+  {
+    id: 'curr-7',
+    departmentId: 'dept-pdr',
+    teacherName: 'Özlem Sendan (Rehberlik ve Psikolojik Danışmanlık)',
+    courseName: 'Gelişim & Rehberlik Saatleri',
+    gradeLevel: 'Hazırlık & 9. Sınıf',
+    learningOutcome: 'Sosyal sorumluluk bilinci, empatik düşünme ve doğa ile uyumlu yaşam becerileri.',
+    sdgGoals: [3, 4],
+    activityDescription: 'Öğrencilerle eko-farkındalık çemberi ve sürdürülebilir yaşam alışkanlıkları öz-değerlendirme anketi.',
+    studentCount: 190,
+    academicTerm: '2026-2027 Güz'
+  }
+];
+
+export const INITIAL_CAMPUS_METRICS: CampusMetric[] = [
+  {
+    id: 'met-1',
+    period: '2026-04',
+    electricityKwh: 14200,
+    waterM3: 310,
+    paperReams: 45,
+    recyclingPaperKg: 280,
+    recyclingPlasticKg: 95,
+    recyclingGlassKg: 60,
+    recyclingMetalKg: 25,
+    compostOrganicKg: 110,
+    specialEwasteKg: 35,
+    notes: 'Bahar dönemi sınav haftası.'
+  },
+  {
+    id: 'met-2',
+    period: '2026-05',
+    electricityKwh: 12800,
+    waterM3: 285,
+    paperReams: 32,
+    recyclingPaperKg: 310,
+    recyclingPlasticKg: 115,
+    recyclingGlassKg: 75,
+    recyclingMetalKg: 30,
+    compostOrganicKg: 145,
+    specialEwasteKg: 20,
+    notes: 'Kompost üretimi artış gösterdi.'
+  },
+  {
+    id: 'met-3',
+    period: '2026-06',
+    electricityKwh: 10400,
+    waterM3: 240,
+    paperReams: 20,
+    recyclingPaperKg: 390,
+    recyclingPlasticKg: 130,
+    recyclingGlassKg: 85,
+    recyclingMetalKg: 40,
+    compostOrganicKg: 160,
+    specialEwasteKg: 85,
+    notes: 'Yıl sonu kağıt ve e-atık geri dönüşümü.'
+  },
+  {
+    id: 'met-4',
+    period: '2026-07',
+    electricityKwh: 7200,
+    waterM3: 150,
+    paperReams: 5,
+    recyclingPaperKg: 60,
+    recyclingPlasticKg: 30,
+    recyclingGlassKg: 20,
+    recyclingMetalKg: 10,
+    compostOrganicKg: 40,
+    specialEwasteKg: 5,
+    notes: 'Yaz tatili nöbetçi personel.'
+  },
+  {
+    id: 'met-5',
+    period: '2026-08',
+    electricityKwh: 8100,
+    waterM3: 170,
+    paperReams: 12,
+    recyclingPaperKg: 90,
+    recyclingPlasticKg: 45,
+    recyclingGlassKg: 35,
+    recyclingMetalKg: 15,
+    compostOrganicKg: 50,
+    specialEwasteKg: 10,
+    notes: 'Yeni eğitim yılı hazırlıkları.'
+  },
+  {
+    id: 'met-6',
+    period: '2026-09',
+    electricityKwh: 13100,
+    waterM3: 295,
+    paperReams: 38,
+    recyclingPaperKg: 320,
+    recyclingPlasticKg: 120,
+    recyclingGlassKg: 70,
+    recyclingMetalKg: 35,
+    compostOrganicKg: 155,
+    specialEwasteKg: 45,
+    notes: '2026-2027 Eğitim Öğretim Yılı başlangıcı.'
+  }
+];
