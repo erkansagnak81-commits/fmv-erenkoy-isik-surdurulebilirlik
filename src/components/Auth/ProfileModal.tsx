@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { UserProfile } from '../../types';
 import { DEPARTMENTS } from '../../constants';
@@ -33,6 +33,15 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setAvatar(currentUser.avatar || '');
+      setErrorMsg(null);
+      setIsUrlInputOpen(false);
+      setUrlValue('');
+    }
+  }, [isOpen, currentUser]);
 
   if (!isOpen) return null;
 
@@ -98,8 +107,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               <User className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-white">Profil Bilgilerim</h3>
-              <p className="text-xs text-slate-300">Profil fotoğrafınızı güncelleyin</p>
+              <h3 className="font-bold text-base text-white">
+                {currentUser.name ? `${currentUser.name} Profil Bilgileri` : 'Profil Bilgilerim'}
+              </h3>
+              <p className="text-xs text-slate-300">Profil fotoğrafını güncelleyin</p>
             </div>
           </div>
           <button

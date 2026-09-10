@@ -781,11 +781,13 @@ export function App() {
         onTeacherChange={handleTeacherSelect}
         pendingCount={pendingCount}
         onLogout={handleLogout}
-        onUpdateAvatar={async (newAvatar) => {
-          const targetId = authUser?.id || currentUser.id;
+        onUpdateAvatar={async (newAvatar, targetUserId) => {
+          const targetId = targetUserId || currentUser.id || authUser?.id;
           if (targetId) {
             await handleUpdateProfile(targetId, { avatar: newAvatar });
-            showToast('Profil fotoğrafınız başarıyla güncellendi.');
+            const targetP = profiles.find(p => p.id === targetId);
+            const name = targetP?.name || currentUser.name || 'Profil';
+            showToast(`${name} fotoğrafı başarıyla güncellendi.`);
           }
         }}
         activeAcademicYear={activeAcademicYear}

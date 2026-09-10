@@ -15,7 +15,7 @@ interface HeaderProps {
   onTeacherChange?: (teacherId: string) => void;
   pendingCount: number;
   onLogout?: () => void;
-  onUpdateAvatar?: (newAvatar: string) => Promise<void>;
+  onUpdateAvatar?: (newAvatar: string, targetUserId?: string) => Promise<void>;
   activeAcademicYear?: AcademicYear;
   academicYears?: AcademicYear[];
   onSaveAcademicYear?: (year: AcademicYear) => Promise<void>;
@@ -288,13 +288,13 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Kullanıcının Kendi Profilini Düzenleme Modalı */}
+      {/* Kullanıcının veya Önizleme Modunda Seçili Kişinin Profil Düzenleme Modalı */}
       {onUpdateAvatar && (
         <ProfileModal
           isOpen={isProfileModalOpen}
           onClose={() => setIsProfileModalOpen(false)}
-          currentUser={realUser}
-          onUpdateAvatar={onUpdateAvatar}
+          currentUser={displayUser}
+          onUpdateAvatar={(newAvatar) => onUpdateAvatar(newAvatar, displayUser.id)}
         />
       )}
 
