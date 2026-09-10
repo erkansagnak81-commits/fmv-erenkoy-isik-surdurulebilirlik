@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ProjectEvent, UserProfile, ProjectStatus } from '../../types';
-import { DEPARTMENTS, SDG_GOALS, parseTargetGrades } from '../../constants';
+import { ProjectEvent, UserProfile, ProjectStatus, AcademicYear } from '../../types';
+import { DEPARTMENTS, SDG_GOALS, parseTargetGrades, isSuperAdminEmail } from '../../constants';
 import { exportProjectsToCsv } from '../../lib/exportUtils';
 import { ProjectDetailModal } from './ProjectDetailModal';
 import { 
@@ -8,7 +8,7 @@ import {
   Search, 
   Filter, 
   Calendar, 
-  CalendarDays,
+  CalendarDays, 
   MapPin, 
   User, 
   CheckCircle, 
@@ -25,7 +25,8 @@ import {
   Download,
   Eye,
   Globe2,
-  Info
+  Info,
+  Trash2
 } from 'lucide-react';
 
 interface ProjectListProps {
@@ -34,9 +35,11 @@ interface ProjectListProps {
   onOpenNewModal: () => void;
   onEditProject: (project: ProjectEvent) => void;
   onOpenReportModal: (project: ProjectEvent) => void;
+  onDeleteProject?: (projectId: string) => void;
   selectedSdgFilter: number | null;
   onClearSdgFilter: () => void;
   onNavigateTab?: (tab: string) => void;
+  activeAcademicYear?: AcademicYear;
 }
 
 export const ProjectList: React.FC<ProjectListProps> = ({
@@ -45,13 +48,16 @@ export const ProjectList: React.FC<ProjectListProps> = ({
   onOpenNewModal,
   onEditProject,
   onOpenReportModal,
+  onDeleteProject,
   selectedSdgFilter,
   onClearSdgFilter,
   onNavigateTab,
+  activeAcademicYear,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [yearFilter, setYearFilter] = useState<'year' | 'all'>('year');
   
   // Kapsam Sekmesi: 'my' (Bireysel/Zümre) vs 'school' (Okul Geneli İlham Vitrini)
   const [scopeTab, setScopeTab] = useState<'my' | 'school'>(() => {
@@ -104,8 +110,28 @@ export const ProjectList: React.FC<ProjectListProps> = ({
     const matchesSdg = 
       selectedSdgFilter === null || p.sdgGoals.includes(selectedSdgFilter);
 
-    return matchesSearch && matchesStatus && matchesDept && matchesSdg;
+    const matchesYear = 
+      yearFilter === 'all' || 
+      !activeAcademicYear || 
+      (p.startDate >= activeAcademicYear.startDate && p.startDate <= activeAcademicYear.endDate);
+
+    return matchesSearch && matchesStatus && matchesDept && matchesSdg && matchesYear;
   });
+
+  const canDeleteProject = (project: ProjectEvent) => {
+    if (!onDeleteProject) return false;
+    if (currentUser.role === 'coordinator' || currentUser.role === 'admin' || isSuperAdminEmail(currentUser.email)) {
+      return true;
+    }
+    return project.advisorId === currentUser.id && (project.status === 'draft' || project.status === 'submitted');
+  };
+
+  const handleDelete = (project: ProjectEvent) => {
+    if (!onDeleteProject) return;
+    if (window.confirm(`"${project.title}" projesini kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) {
+      onDeleteProject(project.id);
+    }
+  };
 
   const schoolScopeCount = projects.filter(p => 
     (selectedSdgFilter === null || p.sdgGoals.includes(selectedSdgFilter)) &&
@@ -362,8 +388,35 @@ export const ProjectList: React.FC<ProjectListProps> = ({
             />
           </div>
 
-          {/* Bölüm Filtresi */}
-          <div className="flex items-center gap-2">
+          {/* Bölüm & Dönem Filtreleri */}
+          <div className="flex items-center flex-wrap gap-2">
+            {activeAcademicYear && (
+              <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-xl border border-slate-200 text-xs shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setYearFilter('year')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    yearFilter === 'year'
+                      ? 'bg-white text-teal-900 shadow-2xs font-bold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  {activeAcademicYear.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setYearFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    yearFilter === 'all'
+                      ? 'bg-white text-teal-900 shadow-2xs font-bold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Tüm Yıllar
+                </button>
+              </div>
+            )}
+
             <select
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
@@ -626,6 +679,16 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                         <span>Raporu Güncelle</span>
                       </button>
                     )}
+
+                    {canDeleteProject(project) && (
+                      <button
+                        onClick={() => handleDelete(project)}
+                        className="p-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors cursor-pointer"
+                        title="Projeyi Kalıcı Olarak Sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -643,6 +706,8 @@ export const ProjectList: React.FC<ProjectListProps> = ({
           onOpenReportModal={onOpenReportModal}
           canEditReport={canReportProject(detailProject) || (detailProject.status === 'completed' && (currentUser.role === 'coordinator' || currentUser.role === 'admin' || detailProject.advisorId === currentUser.id))}
           onEditProject={onEditProject}
+          onDeleteProject={onDeleteProject}
+          currentUser={currentUser}
         />
       )}
     </div>

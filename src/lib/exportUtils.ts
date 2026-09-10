@@ -226,3 +226,63 @@ export function exportDatabaseBackupJson(data: {
   const dateStr = new Date().toISOString().slice(0, 10);
   downloadFile(`FMV_Isik_Surdurulebilirlik_Yedek_${dateStr}.json`, jsonStr, 'application/json');
 }
+
+export interface ParsedDatabaseBackup {
+  projects: ProjectEvent[];
+  curriculums: CurriculumIntegration[];
+  campusMetrics: CampusMetric[];
+  profiles?: any[];
+  academicYears?: AcademicYear[];
+  exportedAt?: string;
+  version?: string;
+}
+
+/**
+ * 5. Sistem JSON Veritabanı Yedeğini Doğrular ve Ayrıştırır
+ */
+export function parseDatabaseBackupJson(jsonString: string): {
+  success: boolean;
+  data?: ParsedDatabaseBackup;
+  error?: string;
+} {
+  try {
+    const parsed = JSON.parse(jsonString);
+    if (!parsed || typeof parsed !== 'object') {
+      return { success: false, error: 'Geçersiz JSON formatı.' };
+    }
+
+    const projects = Array.isArray(parsed.projects) ? parsed.projects : [];
+    const curriculums = Array.isArray(parsed.curriculums) ? parsed.curriculums : [];
+    const campusMetrics = Array.isArray(parsed.campusMetrics) 
+      ? parsed.campusMetrics 
+      : (Array.isArray(parsed.metrics) ? parsed.metrics : []);
+    const profiles = Array.isArray(parsed.profiles) ? parsed.profiles : [];
+    const academicYears = Array.isArray(parsed.academicYears) ? parsed.academicYears : [];
+
+    if (projects.length === 0 && curriculums.length === 0 && campusMetrics.length === 0) {
+      return { 
+        success: false, 
+        error: 'Yedek dosyasında geçerli proje, müfredat veya sayaç verisi bulunamadı.' 
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        projects,
+        curriculums,
+        campusMetrics,
+        profiles,
+        academicYears,
+        exportedAt: parsed.exportedAt,
+        version: parsed.version
+      }
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: `JSON ayrıştırma hatası: ${err.message || 'Bilinmeyen hata'}`
+    };
+  }
+}
+

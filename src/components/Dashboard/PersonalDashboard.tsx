@@ -40,6 +40,7 @@ interface PersonalDashboardProps {
   onUpdateProjectStatus: (projectId: string, status: ProjectStatus, feedback?: string) => void;
   onNavigateTab: (tab: string) => void;
   activeAcademicYear?: AcademicYear;
+  onDeleteProject?: (projectId: string) => void;
 }
 
 export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
@@ -54,6 +55,7 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
   onUpdateProjectStatus,
   onNavigateTab,
   activeAcademicYear,
+  onDeleteProject,
 }) => {
   const currentDept = DEPARTMENTS.find(d => d.id === currentUser.departmentId);
   const isTeacher = currentUser.role === 'teacher';
@@ -717,6 +719,8 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
           currentUser.name === selectedDetailProject?.advisorName
         }
         onEditProject={onEditProject}
+        onDeleteProject={onDeleteProject}
+        currentUser={currentUser}
       />
     </div>
   );

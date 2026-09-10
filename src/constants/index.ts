@@ -91,6 +91,11 @@ export function parseTargetGrades(targetGrades: string[] = []): ParsedTargetGrad
   return result;
 }
 
+export const SUPER_ADMIN_EMAIL = 'erkan.sagnak@fmvisik.k12.tr';
+export const isSuperAdminEmail = (email?: string | null): boolean => {
+  return Boolean(email && email.trim().toLowerCase() === SUPER_ADMIN_EMAIL);
+};
+
 export const GOOGLE_DRIVE_ARCHIVE_CONFIG = {
   rootFolderUrl: 'https://drive.google.com/drive/folders/1W0oLOb6t_OgIToO57C1OGeejEX1P8EG8?usp=sharing',
   rootFolderId: '1W0oLOb6t_OgIToO57C1OGeejEX1P8EG8',

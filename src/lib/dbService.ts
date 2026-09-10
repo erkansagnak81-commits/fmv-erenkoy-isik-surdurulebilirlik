@@ -7,7 +7,8 @@ import {
   updateDoc, 
   deleteDoc, 
   query, 
-  orderBy 
+  orderBy,
+  onSnapshot
 } from 'firebase/firestore';
 import { signInWithPopup, signOut } from 'firebase/auth';
 import { 
@@ -846,6 +847,145 @@ export const dbService = {
       }
     }
     return updated;
+  },
+
+  // 12. JSON YEDEK GERİ YÜKLEME (RESTORE)
+  async restoreDatabaseBackup(backup: {
+    projects?: ProjectEvent[];
+    curriculums?: CurriculumIntegration[];
+    campusMetrics?: CampusMetric[];
+    academicYears?: AcademicYear[];
+    profiles?: UserProfile[];
+  }): Promise<{ 
+    success: boolean; 
+    message: string; 
+    counts: { projects: number; curriculums: number; metrics: number } 
+  }> {
+    const projects = backup.projects || [];
+    const curriculums = backup.curriculums || [];
+    const metrics = backup.campusMetrics || [];
+    const academicYears = backup.academicYears || [];
+    const profiles = backup.profiles || [];
+
+    // 1. Yerel Depolamayı Güncelle
+    saveLocalProjects(projects);
+    saveLocalCurriculums(curriculums);
+    saveLocalCampusMetrics(metrics);
+    if (academicYears.length > 0) {
+      saveLocalAcademicYears(academicYears);
+    }
+    if (profiles.length > 0) {
+      saveLocalProfiles(profiles);
+    }
+
+    // 2. Firebase Varsa Eşitle
+    if (isFirebaseConfigured && db) {
+      try {
+        for (const p of projects) {
+          await setDoc(doc(db, 'projects_events', p.id), p);
+        }
+        for (const c of curriculums) {
+          await setDoc(doc(db, 'curriculum_integrations', c.id), c);
+        }
+        for (const m of metrics) {
+          await setDoc(doc(db, 'campus_metrics', m.id), m);
+        }
+        for (const y of academicYears) {
+          await setDoc(doc(db, 'academic_years', y.id), y);
+        }
+        for (const prof of profiles) {
+          await setDoc(doc(db, 'profiles', prof.id), prof);
+        }
+      } catch (e: any) {
+        console.warn('Firebase restoreDatabaseBackup sync warning:', e);
+      }
+    }
+
+    return {
+      success: true,
+      message: `Veritabanı yedeği başarıyla geri yüklendi: ${projects.length} proje, ${curriculums.length} müfredat entegrasyonu, ${metrics.length} tüketim metriği.`,
+      counts: {
+        projects: projects.length,
+        curriculums: curriculums.length,
+        metrics: metrics.length
+      }
+    };
+  },
+
+  // 13. GERÇEK ZAMANLI VERİTABANI DİNLEYİCİLERİ (REAL-TIME SNAPSHOTS)
+  subscribeToProjects(callback: (projects: ProjectEvent[], isRemoteUpdate: boolean) => void): () => void {
+    if (!isFirebaseConfigured || !db) return () => {};
+    let isInitial = true;
+    try {
+      const q = query(collection(db, 'projects_events'), orderBy('createdAt', 'desc'));
+      return onSnapshot(q, (snapshot) => {
+        const list: ProjectEvent[] = [];
+        snapshot.forEach(docSnap => {
+          list.push(docSnap.data() as ProjectEvent);
+        });
+        if (list.length > 0) {
+          saveLocalProjects(list);
+        }
+        const isRemote = !isInitial && !snapshot.metadata.hasPendingWrites;
+        isInitial = false;
+        callback(list, isRemote);
+      }, (err) => {
+        console.warn('Projects snapshot subscription error:', err);
+      });
+    } catch (e) {
+      console.warn('Could not subscribe to projects:', e);
+      return () => {};
+    }
+  },
+
+  subscribeToCampusMetrics(callback: (metrics: CampusMetric[], isRemoteUpdate: boolean) => void): () => void {
+    if (!isFirebaseConfigured || !db) return () => {};
+    let isInitial = true;
+    try {
+      const q = query(collection(db, 'campus_metrics'), orderBy('period', 'asc'));
+      return onSnapshot(q, (snapshot) => {
+        const list: CampusMetric[] = [];
+        snapshot.forEach(docSnap => {
+          list.push(docSnap.data() as CampusMetric);
+        });
+        if (list.length > 0) {
+          saveLocalCampusMetrics(list);
+        }
+        const isRemote = !isInitial && !snapshot.metadata.hasPendingWrites;
+        isInitial = false;
+        callback(list, isRemote);
+      }, (err) => {
+        console.warn('Campus metrics snapshot subscription error:', err);
+      });
+    } catch (e) {
+      console.warn('Could not subscribe to campus metrics:', e);
+      return () => {};
+    }
+  },
+
+  subscribeToCurriculums(callback: (curriculums: CurriculumIntegration[], isRemoteUpdate: boolean) => void): () => void {
+    if (!isFirebaseConfigured || !db) return () => {};
+    let isInitial = true;
+    try {
+      return onSnapshot(collection(db, 'curriculum_integrations'), (snapshot) => {
+        const list: CurriculumIntegration[] = [];
+        snapshot.forEach(docSnap => {
+          list.push(docSnap.data() as CurriculumIntegration);
+        });
+        if (list.length > 0) {
+          saveLocalCurriculums(list);
+        }
+        const isRemote = !isInitial && !snapshot.metadata.hasPendingWrites;
+        isInitial = false;
+        callback(list, isRemote);
+      }, (err) => {
+        console.warn('Curriculum snapshot subscription error:', err);
+      });
+    } catch (e) {
+      console.warn('Could not subscribe to curriculums:', e);
+      return () => {};
+    }
   }
 };
+
 

@@ -1,29 +1,26 @@
 import React, { useState } from 'react';
 import { UserProfile, UserRole, Department, AcademicYear } from '../../types';
-import { DEPARTMENTS } from '../../constants';
+import { DEPARTMENTS, isSuperAdminEmail } from '../../constants';
 import { Sparkles, UserCheck, LogOut, Camera, GraduationCap } from 'lucide-react';
 import { ProfileModal } from '../Auth/ProfileModal';
 import { AcademicYearModal } from '../Admin/AcademicYearModal';
 
 interface HeaderProps {
   currentUser: UserProfile;
-  authUser?: UserProfile | null;
-  profiles?: UserProfile[];
+  authUser: UserProfile | null;
+  profiles: UserProfile[];
   activeTeacherId?: string;
   onRoleChange: (role: UserRole) => void;
-  onDepartmentHeadChange?: (dept: Department) => void;
+  onDepartmentHeadChange: (dept: Department) => void;
   onTeacherChange?: (teacherId: string) => void;
   pendingCount: number;
-  onSyncSeedData?: () => void;
-  onClearTestData?: () => Promise<void> | void;
-  isSyncing?: boolean;
   onLogout?: () => void;
   onUpdateAvatar?: (newAvatar: string) => Promise<void>;
   activeAcademicYear?: AcademicYear;
   academicYears?: AcademicYear[];
   onSaveAcademicYear?: (year: AcademicYear) => Promise<void>;
   onSetActiveAcademicYear?: (yearId: string) => Promise<void>;
-  onExportBackup?: () => void;
+  hasLiveUpdate?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -41,13 +38,14 @@ export const Header: React.FC<HeaderProps> = ({
   academicYears = [],
   onSaveAcademicYear,
   onSetActiveAcademicYear,
+  hasLiveUpdate = false,
 }) => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAcademicYearModalOpen, setIsAcademicYearModalOpen] = useState(false);
 
   // Oturum açmış gerçek kullanıcı
   const realUser = authUser || currentUser;
-  const isSuperAdmin = (authUser?.email || currentUser.email).toLowerCase() === 'erkan.sagnak@fmvisik.k12.tr';
+  const isSuperAdmin = isSuperAdminEmail(authUser?.email || currentUser.email) || currentUser.role === 'admin';
   const isSimulating = isSuperAdmin && currentUser.role !== 'coordinator';
 
   // Seçilen kişinin kimliğini göster (Simülasyon modunda o kişinin sayfası ve bilgisi gösterilir)
@@ -57,12 +55,28 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="no-print sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 lg:px-8 py-3 transition-all shadow-xs">
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        {/* Sol: Okul Adı ve Portal Başlığı */}
+        {/* Sol: Okul Adı, Portal Başlığı ve Canlı Eşitleme Durumu */}
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center flex-wrap gap-2">
             <h1 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
               FMV Erenköy Işık Lisesi ve Fen Lisesi
             </h1>
+            
+            {/* Canlı Firestore Eşitleme Göstergesi (Kullanıcı etkileşimi gerektirmeyen otomatik bildirim) */}
+            <div 
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-all duration-300 ${
+                hasLiveUpdate 
+                  ? 'bg-amber-100 text-amber-900 border-amber-300 ring-2 ring-amber-400/40 animate-pulse' 
+                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              }`}
+              title={hasLiveUpdate ? 'Yeni bir değişiklik algılandı ve anında yansıtıldı.' : 'Cloud Firestore ile canlı ve otomatik olarak senkronize durumdasınız.'}
+            >
+              <span className="relative flex h-1.5 w-1.5">
+                <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${hasLiveUpdate ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-ping'}`}></span>
+                <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${hasLiveUpdate ? 'bg-amber-600' : 'bg-emerald-600'}`}></span>
+              </span>
+              <span>{hasLiveUpdate ? 'Veriler Güncellendi' : 'Canlı Senkronize'}</span>
+            </div>
           </div>
           <p className="text-xs text-slate-500 font-medium">
             Sürdürülebilirlik &amp; Çevre Yönetim Portalı (EcoCampus)
@@ -254,7 +268,7 @@ export const Header: React.FC<HeaderProps> = ({
                   )}
                 </div>
                 <p className="text-[10px] text-slate-400 font-medium truncate max-w-[160px]">
-                  {displayUser.email.toLowerCase() === 'erkan.sagnak@fmvisik.k12.tr'
+                  {isSuperAdminEmail(displayUser.email)
                     ? 'Sürdürülebilirlik Koordinatörlüğü'
                     : displayUser.email}
                 </p>

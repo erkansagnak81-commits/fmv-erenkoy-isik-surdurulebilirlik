@@ -11,6 +11,7 @@ import {
   FolderKanban
 } from 'lucide-react';
 import { UserRole } from '../../types';
+import { isSuperAdminEmail } from '../../constants';
 
 interface SidebarProps {
   currentTab: string;
@@ -27,7 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   userRole,
   currentUserEmail,
 }) => {
-  const isSuperAdmin = currentUserEmail?.toLowerCase() === 'erkan.sagnak@fmvisik.k12.tr';
+  const isSuperAdmin = isSuperAdminEmail(currentUserEmail) || userRole === 'admin';
 
   const getDashboardLabel = () => {
     if (userRole === 'teacher') return 'Bireysel Panelim';

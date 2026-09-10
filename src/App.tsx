@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   UserProfile, 
   UserRole, 
@@ -10,12 +10,12 @@ import {
   Department,
   AcademicYear 
 } from './types';
-import { DEPARTMENTS } from './constants';
+import { DEPARTMENTS, isSuperAdminEmail } from './constants';
 import { 
   DEFAULT_SIMULATION_USERS as MOCK_USERS, 
   INITIAL_PROFILES
 } from './data/initialData';
-import { exportDatabaseBackupJson } from './lib/exportUtils';
+import { exportDatabaseBackupJson, ParsedDatabaseBackup } from './lib/exportUtils';
 import { dbService } from './lib/dbService';
 import { isFirebaseConfigured, auth } from './lib/firebase';
 import { Header } from './components/Layout/Header';
@@ -118,6 +118,23 @@ export function App() {
     }, 4000);
   };
 
+  // Gerçek Zamanlı Canlı Güncelleme Rozet Durumu
+  const [hasLiveUpdate, setHasLiveUpdate] = useState(false);
+  const liveUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerLiveUpdateNotice = (msg?: string) => {
+    setHasLiveUpdate(true);
+    if (liveUpdateTimerRef.current) {
+      clearTimeout(liveUpdateTimerRef.current);
+    }
+    liveUpdateTimerRef.current = setTimeout(() => {
+      setHasLiveUpdate(false);
+    }, 6000);
+    if (msg) {
+      showToast(msg);
+    }
+  };
+
   // Oturum Yönetimi
   const handleLogin = (user: UserProfile) => {
     setAuthUser(user);
@@ -192,9 +209,12 @@ export function App() {
     }
   };
 
-  // 1. Canlı ve Yerel Verileri Senkronize Et
+  // 1. Canlı ve Yerel Verileri Senkronize Et (Gerçek Zamanlı Dinleyiciler)
   useEffect(() => {
     let unsubscribeAuth: (() => void) | undefined;
+    let unsubscribeProjects: (() => void) | undefined;
+    let unsubscribeCurr: (() => void) | undefined;
+    let unsubscribeMetrics: (() => void) | undefined;
 
     const loadData = async () => {
       // Profilleri çek
@@ -224,24 +244,27 @@ export function App() {
         console.warn('Eğitim yılları yüklenemedi:', err);
       }
 
-      if (isFirebaseConfigured && auth) {
+      if (isFirebaseConfigured) {
         try {
-          // Firebase Google Auth Oturum Dinleyicisi
-          unsubscribeAuth = auth.onAuthStateChanged(async (firebaseUser) => {
-            if (firebaseUser?.email) {
-              const email = firebaseUser.email.toLowerCase();
-              const liveProfiles = await dbService.getProfiles();
-              const matched = liveProfiles.find(p => p.email.toLowerCase() === email);
-              if (matched) {
-                handleLogin(matched);
-              } else {
-                showToast('Yetkisiz Erişim: Bu Google hesabı için atanmış bir rol bulunamadı.');
-                await dbService.logOut();
+          if (auth) {
+            // Firebase Google Auth Oturum Dinleyicisi
+            unsubscribeAuth = auth.onAuthStateChanged(async (firebaseUser) => {
+              if (firebaseUser?.email) {
+                const email = firebaseUser.email.toLowerCase();
+                const liveProfiles = await dbService.getProfiles();
+                const matched = liveProfiles.find(p => p.email.toLowerCase() === email);
+                if (matched) {
+                  handleLogin(matched);
+                } else {
+                  showToast('Yetkisiz Erişim: Bu Google hesabı için atanmış bir rol bulunamadı.');
+                  await dbService.logOut();
+                }
               }
-            }
-          });
+            });
+          }
 
-          const { data: liveProjects, fromLive } = await dbService.getProjects();
+          // İlk Yükleme
+          const { data: liveProjects } = await dbService.getProjects();
           if (liveProjects && liveProjects.length > 0) {
             setProjects(liveProjects);
           }
@@ -256,11 +279,36 @@ export function App() {
             setMetrics(liveMet);
           }
 
-          if (fromLive) {
-            showToast('FMV Erenköy Işık veritabanı senkronize edildi.');
-          }
+          // Gerçek Zamanlı Dinleyiciler (Firestore onSnapshot)
+          unsubscribeProjects = dbService.subscribeToProjects((liveList, isRemote) => {
+            if (liveList) {
+              setProjects(liveList);
+              if (isRemote) {
+                triggerLiveUpdateNotice('Canlı Senkronizasyon: Proje listesi güncellendi.');
+              }
+            }
+          });
+
+          unsubscribeCurr = dbService.subscribeToCurriculums((liveCurrList, isRemote) => {
+            if (liveCurrList) {
+              setCurriculums(liveCurrList);
+              if (isRemote) {
+                triggerLiveUpdateNotice('Canlı Senkronizasyon: Müfredat kazanımları güncellendi.');
+              }
+            }
+          });
+
+          unsubscribeMetrics = dbService.subscribeToCampusMetrics((liveMetrics, isRemote) => {
+            if (liveMetrics) {
+              setMetrics(liveMetrics);
+              if (isRemote) {
+                triggerLiveUpdateNotice('Canlı Senkronizasyon: Sayaç ve tüketim verileri güncellendi.');
+              }
+            }
+          });
+
         } catch (e) {
-          console.error('Veri yükleme hatası:', e);
+          console.error('Veri yükleme veya dinleyici hatası:', e);
         }
       }
     };
@@ -268,9 +316,11 @@ export function App() {
     loadData();
 
     return () => {
-      if (unsubscribeAuth) {
-        unsubscribeAuth();
-      }
+      if (unsubscribeAuth) unsubscribeAuth();
+      if (unsubscribeProjects) unsubscribeProjects();
+      if (unsubscribeCurr) unsubscribeCurr();
+      if (unsubscribeMetrics) unsubscribeMetrics();
+      if (liveUpdateTimerRef.current) clearTimeout(liveUpdateTimerRef.current);
     };
   }, []);
 
@@ -354,6 +404,27 @@ export function App() {
       showToast('Proje taslağı başarıyla güncellendi.');
     }
     await dbService.updateProject(projectId, updates);
+  };
+
+  // 2.2 Proje Silme
+  const handleDeleteProject = async (projectId: string) => {
+    const target = projects.find(p => p.id === projectId);
+    const title = target?.title || 'Proje';
+
+    const canDelete = 
+      currentUser.role === 'coordinator' || 
+      currentUser.role === 'admin' || 
+      isSuperAdminEmail(currentUser.email) ||
+      (target?.advisorId === currentUser.id && (target?.status === 'draft' || target?.status === 'submitted'));
+
+    if (!canDelete) {
+      showToast('Bu projeyi silme yetkiniz bulunmamaktadır.');
+      return;
+    }
+
+    setProjects(prev => prev.filter(p => p.id !== projectId));
+    showToast(`"${title}" başarıyla silindi.`);
+    await dbService.deleteProject(projectId);
   };
 
   // 3. Durum Güncelleme (Onay / Revizyon)
@@ -595,6 +666,43 @@ export function App() {
     }
   };
 
+  // 9. Veritabanı Yedeği Geri Yükleme (JSON Restore)
+  const handleRestoreBackup = async (backupData: ParsedDatabaseBackup) => {
+    setIsSyncing(true);
+    showToast('Veritabanı yedeği Cloud Firestore ve yerel belleğe aktarılıyor...');
+    try {
+      const res = await dbService.restoreDatabaseBackup(backupData);
+      if (backupData.projects) setProjects(backupData.projects);
+      if (backupData.curriculums) setCurriculums(backupData.curriculums);
+      if (backupData.campusMetrics) setMetrics(backupData.campusMetrics);
+      if (backupData.academicYears && backupData.academicYears.length > 0) {
+        setAcademicYears(backupData.academicYears);
+        const activeYear = backupData.academicYears.find(y => y.isActive) || backupData.academicYears[0];
+        if (activeYear) setActiveAcademicYear(activeYear);
+      }
+      if (backupData.profiles && backupData.profiles.length > 0) {
+        setProfiles(backupData.profiles);
+      }
+      showToast(res.message);
+    } catch (err: any) {
+      showToast(`Geri yükleme hatası: ${err.message || 'Bilinmeyen hata'}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // 9.1 Veritabanı Yedeği İndirme (JSON Export)
+  const handleExportBackup = () => {
+    exportDatabaseBackupJson({
+      projects,
+      curriculums,
+      campusMetrics: metrics,
+      profiles,
+      academicYears,
+    });
+    showToast('Veritabanı JSON yedeği başarıyla indirildi.');
+  };
+
   const handleOpenReportModal = (project: ProjectEvent) => {
     if (currentUser.role === 'teacher') {
       const isOwner = project.advisorId === currentUser.id || 
@@ -672,9 +780,6 @@ export function App() {
         onDepartmentHeadChange={handleDeptHeadSelect}
         onTeacherChange={handleTeacherSelect}
         pendingCount={pendingCount}
-        onSyncSeedData={handleSyncSeedData}
-        onClearTestData={handleClearTestData}
-        isSyncing={isSyncing}
         onLogout={handleLogout}
         onUpdateAvatar={async (newAvatar) => {
           const targetId = authUser?.id || currentUser.id;
@@ -687,16 +792,7 @@ export function App() {
         academicYears={academicYears}
         onSaveAcademicYear={handleSaveAcademicYear}
         onSetActiveAcademicYear={handleSetActiveAcademicYear}
-        onExportBackup={() => {
-          exportDatabaseBackupJson({
-            projects,
-            curriculums,
-            campusMetrics: metrics,
-            profiles,
-            academicYears,
-          });
-          showToast('Veritabanı JSON yedeği başarıyla indirildi.');
-        }}
+        hasLiveUpdate={hasLiveUpdate}
       />
 
       {/* Ana Gövde */}
@@ -724,6 +820,7 @@ export function App() {
                 onOpenNewProject={handleOpenNewProject}
                 onEditProject={handleOpenEditProject}
                 onOpenReportModal={handleOpenReportModal}
+                onDeleteProject={handleDeleteProject}
                 onUpdateProjectStatus={handleUpdateProjectStatus}
                 onNavigateTab={(tab) => setCurrentTab(tab)}
                 activeAcademicYear={activeAcademicYear}
@@ -816,9 +913,11 @@ export function App() {
               onOpenNewModal={handleOpenNewProject}
               onEditProject={handleOpenEditProject}
               onOpenReportModal={handleOpenReportModal}
+              onDeleteProject={handleDeleteProject}
               selectedSdgFilter={selectedSdgFilter}
               onClearSdgFilter={() => setSelectedSdgFilter(null)}
               onNavigateTab={setCurrentTab}
+              activeAcademicYear={activeAcademicYear}
             />
           )}
 
@@ -866,14 +965,19 @@ export function App() {
             />
           )}
 
-          {/* SEKME 7: KULLANICI & ROL YÖNETİMİ (YALNIZCA ERKAN SAĞNAK) */}
-          {currentTab === 'users' && authUser?.email?.toLowerCase() === 'erkan.sagnak@fmvisik.k12.tr' && (
+          {/* SEKME 7: KULLANICI & ROL YÖNETİMİ */}
+          {currentTab === 'users' && (isSuperAdminEmail(authUser?.email) || authUser?.role === 'admin') && (
             <UserManagementView 
               profiles={profiles}
               onAddProfile={handleAddProfile}
               onUpdateProfile={handleUpdateProfile}
               onDeleteProfile={handleDeleteProfile}
               currentUser={currentUser}
+              onExportBackup={handleExportBackup}
+              onRestoreBackup={handleRestoreBackup}
+              onSyncSeedData={handleSyncSeedData}
+              onClearTestData={handleClearTestData}
+              isSyncing={isSyncing}
             />
           )}
         </main>

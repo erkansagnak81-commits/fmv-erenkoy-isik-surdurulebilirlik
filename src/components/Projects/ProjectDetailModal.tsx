@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ProjectEvent } from '../../types';
-import { DEPARTMENTS, SDG_GOALS, parseTargetGrades } from '../../constants';
+import { ProjectEvent, UserProfile } from '../../types';
+import { DEPARTMENTS, SDG_GOALS, parseTargetGrades, isSuperAdminEmail } from '../../constants';
 import { getDriveThumbnailUrl } from '../../services/googleDriveService';
 import { 
   X, 
@@ -20,7 +20,8 @@ import {
   FileCheck2,
   Package,
   Video,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Trash2
 } from 'lucide-react';
 
 interface ProjectDetailModalProps {
@@ -30,6 +31,8 @@ interface ProjectDetailModalProps {
   onOpenReportModal?: (project: ProjectEvent) => void;
   canEditReport?: boolean;
   onEditProject?: (project: ProjectEvent) => void;
+  onDeleteProject?: (projectId: string) => void;
+  currentUser?: UserProfile;
 }
 
 export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
@@ -39,9 +42,26 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
   onOpenReportModal,
   canEditReport = false,
   onEditProject,
+  onDeleteProject,
+  currentUser,
 }) => {
   // Lightbox Durumu (Tam Ekran Görsel İnceleme)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const canDelete = Boolean(onDeleteProject && project && (
+    currentUser?.role === 'coordinator' || 
+    currentUser?.role === 'admin' ||
+    isSuperAdminEmail(currentUser?.email) ||
+    (project.advisorId === currentUser?.id && (project.status === 'draft' || project.status === 'submitted'))
+  ));
+
+  const handleDelete = () => {
+    if (!project || !onDeleteProject) return;
+    if (window.confirm(`"${project.title}" projesini kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) {
+      onDeleteProject(project.id);
+      onClose();
+    }
+  };
 
   if (!isOpen || !project) return null;
 
@@ -447,11 +467,21 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
             )}
           </div>
 
-          {/* Alt Kapatma Çubuğu */}
-          <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end shrink-0">
+          {/* Alt Kapatma & Eylem Çubuğu */}
+          <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+            {canDelete ? (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 hover:border-rose-300 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span>Projeyi Sil</span>
+              </button>
+            ) : <div />}
             <button
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-xs"
+              className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
             >
               Kapat
             </button>
