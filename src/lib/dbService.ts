@@ -4,7 +4,6 @@ import {
   getDocs, 
   doc, 
   setDoc, 
-  getDoc,
   updateDoc, 
   deleteDoc, 
   query, 
@@ -20,7 +19,6 @@ import {
   UserProfile,
   AcademicYear 
 } from '../types';
-import { DEPARTMENTS } from '../constants';
 import { 
   INITIAL_PROJECTS, 
   INITIAL_CURRICULUM, 
@@ -211,7 +209,7 @@ export const dbService = {
         for (const p of locals) {
           try {
             await setDoc(doc(db, 'projects_events', p.id), p);
-          } catch (_) {}
+          } catch {}
         }
         return { data: locals, fromLive: true };
       }
@@ -221,13 +219,9 @@ export const dbService = {
         id: docSnap.id,
       }));
 
-      // Remote'daki projeler ile varsa yalnızca yerelde bulunanları birleştir
-      const remoteIds = new Set(remoteProjects.map(p => p.id));
-      const localOnly = locals.filter(p => !remoteIds.has(p.id));
-      const merged = [...remoteProjects, ...localOnly];
-
-      saveLocalProjects(merged);
-      return { data: merged, fromLive: true };
+      // Canlı Firestore veritabanı aktif ve veri mevcut ise uzak liste esas alınır
+      saveLocalProjects(remoteProjects);
+      return { data: remoteProjects, fromLive: true };
     } catch (err) {
       console.warn('Firebase getProjects fallback to local data:', err);
       return { data: locals, fromLive: false };
@@ -391,7 +385,7 @@ export const dbService = {
         for (const c of locals) {
           try {
             await setDoc(doc(db, 'curriculum_integrations', c.id), c);
-          } catch (_) {}
+          } catch {}
         }
         return locals;
       }
@@ -493,7 +487,7 @@ export const dbService = {
   },
 
   async createCampusMetric(metric: Omit<CampusMetric, 'id'>, customId?: string): Promise<string> {
-    const tempId = customId || `met-${Date.now()}`;
+    const tempId = customId || (metric.period ? `met-${metric.period}` : `met-${Date.now()}`);
     const newMet: CampusMetric = {
       ...metric,
       id: tempId,

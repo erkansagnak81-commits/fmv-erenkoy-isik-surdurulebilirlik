@@ -15,8 +15,7 @@ import {
   Globe2,
   Lock,
   Sparkles,
-  BookOpen,
-  Filter
+  BookOpen
 } from 'lucide-react';
 
 interface CurriculumTrackerProps {
@@ -129,7 +128,7 @@ export const CurriculumTracker: React.FC<CurriculumTrackerProps> = ({
     setActivityDescription('');
     setSdgGoals([7, 13]);
     setStudentCount(100);
-    setAcademicTerm('2026-2027 Güz');
+    setAcademicTerm(defaultTerm);
     setModalOpen(true);
   };
 
@@ -143,7 +142,7 @@ export const CurriculumTracker: React.FC<CurriculumTrackerProps> = ({
     setActivityDescription(item.activityDescription);
     setSdgGoals(item.sdgGoals || []);
     setStudentCount(item.studentCount || 0);
-    setAcademicTerm(item.academicTerm || '2026-2027 Güz');
+    setAcademicTerm(item.academicTerm || defaultTerm);
     setModalOpen(true);
   };
 

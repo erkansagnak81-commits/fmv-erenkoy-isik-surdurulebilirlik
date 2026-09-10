@@ -7,7 +7,6 @@ import {
   X, 
   AlertTriangle, 
   MessageSquare, 
-  Sparkles, 
   User, 
   Calendar, 
   MapPin, 
@@ -63,7 +62,7 @@ export const ApprovalDesk: React.FC<ApprovalDeskProps> = ({
         spread: 60,
         origin: { y: 0.7 }
       });
-    } catch (_) {}
+    } catch {}
 
     if (isDeptHead) {
       // Bölüm başkanı onayladığında 'dept_approved' olur

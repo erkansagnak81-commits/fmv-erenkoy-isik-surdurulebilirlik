@@ -41,7 +41,8 @@ export function calculateCarbonAnalysis(
   metrics: CampusMetric[],
   studentCount = CARBON_CONSTANTS.DEFAULT_CAMPUS_STUDENTS
 ): CarbonAnalysisResult {
-  const monthsCount = Math.max(metrics.length, 1);
+  const uniqueMonths = new Set(metrics.map(m => m.period)).size;
+  const monthsCount = Math.max(uniqueMonths, 1);
 
   const totalElectricityKwh = metrics.reduce((sum, m) => sum + (m.electricityKwh || 0), 0);
   const totalWaterM3 = metrics.reduce((sum, m) => sum + (m.waterM3 || 0), 0);
@@ -85,6 +86,6 @@ export function calculateCarbonAnalysis(
     treesSavedCount,
     perStudentMonthlyElectricityKwh,
     perStudentDailyWaterLiters,
-    recordedMonthsCount: metrics.length,
+    recordedMonthsCount: uniqueMonths,
   };
 }

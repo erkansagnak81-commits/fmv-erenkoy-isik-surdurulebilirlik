@@ -12,8 +12,7 @@ import {
   Award,
   Download,
   Flame,
-  TreePine,
-  Filter
+  TreePine
 } from 'lucide-react';
 
 interface AnnualReportViewProps {

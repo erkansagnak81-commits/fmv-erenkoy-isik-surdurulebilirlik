@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ProjectEvent, UserProfile, AcademicYear } from '../../types';
-import { DEPARTMENTS, SDG_GOALS, parseTargetGrades } from '../../constants';
+import { DEPARTMENTS, parseTargetGrades } from '../../constants';
 import { ProjectDetailModal } from '../Projects/ProjectDetailModal';
 import { 
   CalendarDays, 
@@ -15,13 +15,11 @@ import {
   CheckCircle2, 
   School, 
   GraduationCap, 
-  Atom, 
   List, 
   Grid3X3, 
   X, 
   Eye, 
   Printer, 
-  Award,
   FileText
 } from 'lucide-react';
 
@@ -111,7 +109,9 @@ export const SchoolCalendarView: React.FC<SchoolCalendarViewProps> = ({
         project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         project.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
         project.advisorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        project.collaboratingTeachers?.some(t => t.toLowerCase().includes(searchTerm.toLowerCase()));
+        (project.studentClub && project.studentClub.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        project.collaboratingTeachers?.some(t => t.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        project.studentRepresentatives?.some(r => r.toLowerCase().includes(searchTerm.toLowerCase()));
 
       return matchesDept && matchesType && matchesSearch;
     });

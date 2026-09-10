@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { UserProfile, UserRole, Department } from '../../types';
+import { UserProfile, UserRole } from '../../types';
 import { DEPARTMENTS } from '../../constants';
 import { 
   Users, 
   UserPlus, 
-  UserCheck, 
   ShieldCheck, 
   Search, 
   Filter, 
@@ -13,11 +12,8 @@ import {
   Sparkles, 
   Building2, 
   GraduationCap, 
-  CheckCircle2, 
   X, 
   AlertCircle,
-  Mail,
-  Briefcase,
   Camera,
   Upload,
   Link2
@@ -139,8 +135,9 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       email = `${email}@fmvisik.k12.tr`;
     }
 
-    if (!email.endsWith('@fmvisik.k12.tr')) {
-      setFormError('E-posta adresi @fmvisik.k12.tr uzantılı olmalıdır.');
+    const isValidDomain = email.endsWith('@fmvisik.k12.tr') || email.endsWith('@fmv.edu.tr');
+    if (!isValidDomain) {
+      setFormError('E-posta adresi @fmvisik.k12.tr veya @fmv.edu.tr uzantılı olmalıdır.');
       return;
     }
 

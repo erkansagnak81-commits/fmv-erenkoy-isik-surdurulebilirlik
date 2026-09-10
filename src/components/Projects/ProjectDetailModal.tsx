@@ -6,7 +6,6 @@ import {
   X, 
   Calendar, 
   MapPin, 
-  Users, 
   GraduationCap, 
   Sparkles, 
   Award, 

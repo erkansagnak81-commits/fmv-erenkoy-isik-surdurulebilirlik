@@ -20,6 +20,5 @@ export const db = getFirestore(app);
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
-  hd: 'fmvisik.k12.tr',
   prompt: 'select_account',
 });

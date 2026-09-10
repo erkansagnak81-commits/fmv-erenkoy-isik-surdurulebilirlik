@@ -5,7 +5,8 @@ service cloud.firestore {
     function isSchoolStaff() {
       return request.auth != null && 
         (request.auth.token.email.matches('.*@fmvisik[.]k12[.]tr$') || 
-         request.auth.token.email.matches('.*@fmv[.]edu[.]tr$'));
+         request.auth.token.email.matches('.*@fmv[.]edu[.]tr$') ||
+         request.auth.token.email == 'erkansagnak81@gmail.com');
     }
 
     // Okul panosu ve SDG projeleri herkes (ziyaretçiler, veliler, öğrenciler) tarafından görüntülenebilir.

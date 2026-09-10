@@ -5,17 +5,12 @@ import { DEPARTMENTS } from '../../constants';
 import { processImageFile } from '../../lib/imageUtils';
 import { 
   User, 
-  Mail, 
-  ShieldCheck, 
-  Building2, 
   Camera, 
   Upload, 
   Link2, 
   X, 
   AlertCircle, 
-  CheckCircle2, 
-  Lock,
-  Sparkles
+  Lock
 } from 'lucide-react';
 
 interface ProfileModalProps {

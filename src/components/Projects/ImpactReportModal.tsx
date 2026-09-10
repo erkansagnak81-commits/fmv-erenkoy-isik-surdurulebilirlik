@@ -6,7 +6,6 @@ import {
   DriveUploadProgress, 
   UploadMediaItem,
   DriveUploadResult,
-  getDriveThumbnailUrl,
   isDriveUrl
 } from '../../services/googleDriveService';
 import { 
@@ -28,7 +27,6 @@ import {
   Sparkles,
   Loader2,
   ExternalLink,
-  Copy,
   Clock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -61,18 +59,18 @@ export const ImpactReportModal: React.FC<ImpactReportModalProps> = ({
   );
 
   // 2. Çoklu Somut Çıktı Kalemleri
-  const initialOutputs: ImpactOutputItem[] = existingReport?.impactOutputs && existingReport.impactOutputs.length > 0
-    ? existingReport.impactOutputs
-    : [
-        {
-          id: `out-${Date.now()}-1`,
-          description: existingReport?.impactMetricUnit || 'Geri kazanılan atık / kompost',
-          value: existingReport?.impactMetricValue || 80,
-          unit: 'kg'
-        }
-      ];
-
-  const [impactOutputs, setImpactOutputs] = useState<ImpactOutputItem[]>(initialOutputs);
+  const [impactOutputs, setImpactOutputs] = useState<ImpactOutputItem[]>(() => {
+    return existingReport?.impactOutputs && existingReport.impactOutputs.length > 0
+      ? existingReport.impactOutputs
+      : [
+          {
+            id: 'out-init-1',
+            description: existingReport?.impactMetricUnit || 'Geri kazanılan atık / kompost',
+            value: existingReport?.impactMetricValue || 80,
+            unit: 'kg'
+          }
+        ];
+  });
 
   // 3. Değerlendirme & Kazanım Notları
   const [evaluationNotes, setEvaluationNotes] = useState<string>(
@@ -96,7 +94,6 @@ export const ImpactReportModal: React.FC<ImpactReportModalProps> = ({
   const [uploadProgress, setUploadProgress] = useState<DriveUploadProgress | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [completedResult, setCompletedResult] = useState<DriveUploadResult | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
   const mediaSectionRef = useRef<HTMLDivElement>(null);
 
   // Yükleme tamamlanan her dosya için anında state güncellemesi (Kayıp önleyici)
@@ -265,7 +262,7 @@ export const ImpactReportModal: React.FC<ImpactReportModalProps> = ({
           spread: 70,
           origin: { y: 0.6 }
         });
-      } catch (_) {}
+      } catch {}
 
       setCompletedResult({
         success: true,
@@ -345,7 +342,7 @@ export const ImpactReportModal: React.FC<ImpactReportModalProps> = ({
         spread: 80,
         origin: { y: 0.6 }
       });
-    } catch (_) {}
+    } catch {}
 
     const legacyPhotoUrls = uploadResult.mediaFiles
       .filter(m => m.type === 'image')

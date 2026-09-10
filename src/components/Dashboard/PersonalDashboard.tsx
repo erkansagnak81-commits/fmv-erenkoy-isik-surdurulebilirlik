@@ -25,8 +25,7 @@ import {
   FolderKanban,
   Users,
   Eye,
-  Globe2,
-  LayoutDashboard
+  Globe2
 } from 'lucide-react';
 
 interface PersonalDashboardProps {
@@ -87,8 +86,6 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
   const deptPendingProjects = deptProjects.filter(p => p.status === 'submitted');
   const deptCurriculums = curriculums.filter(c => c.departmentId === currentUser.departmentId);
   const deptTeachers = profiles.filter(p => p.departmentId === currentUser.departmentId && p.role === 'teacher');
-  const deptTotalStudents = deptProjects.reduce((sum, p) => sum + (p.impactReport?.actualParticipants || 0), 0) +
-    deptCurriculums.reduce((sum, c) => sum + (c.studentCount || 0), 0);
 
   const getStatusBadge = (status: ProjectStatus, feedback?: string) => {
     switch (status) {

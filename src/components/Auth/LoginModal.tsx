@@ -1,16 +1,9 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../../types';
 import { dbService } from '../../lib/dbService';
-import { isFirebaseConfigured } from '../../lib/firebase';
 import { 
   ShieldCheck, 
   AlertCircle, 
-  Sparkles, 
-  Lock,
-  ArrowRight,
-  UserCheck,
-  ChevronRight,
-  HelpCircle,
   X
 } from 'lucide-react';
 
@@ -61,7 +54,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           setErrorMsg('Yetkisiz Erişim: Bu hesap için sistemde yetkilendirilmiş bir rol bulunamadı. Lütfen sistem yöneticisi ile iletişime geçiniz.');
         }
       }
-    } catch (err) {
+    } catch {
       setIsLoading(false);
       setIsAccountChooserOpen(true);
     }

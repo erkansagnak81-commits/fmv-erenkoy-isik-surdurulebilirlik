@@ -68,7 +68,7 @@ export function uploadFileResumable(params: {
   folderId?: string;
   onProgress?: (loadedBytes: number, totalBytes: number, percent: number) => void;
 }): Promise<{ id: string; name: string; url: string }> {
-  const { file, uploadUrl, folderUrl, folderId, onProgress } = params;
+  const { file, uploadUrl, folderUrl, onProgress } = params;
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -121,7 +121,7 @@ export function uploadFileResumable(params: {
             res.name || file.name,
             res.webViewLink || (res.id ? `https://drive.google.com/file/d/${res.id}/view?usp=drivesdk` : undefined)
           );
-        } catch (_) {
+        } catch {
           finalizeSuccess(undefined, file.name);
         }
       } else if (uploadCompleted || (lastLoaded >= totalSize && totalSize > 0)) {
@@ -187,7 +187,7 @@ async function getResumableSessionWithRetry(
       let data: any = null;
       try {
         data = JSON.parse(text);
-      } catch (_) {
+      } catch {
         throw new Error('Google Apps Script geçerli bir JSON yanıtı döndürmedi.');
       }
 
@@ -344,7 +344,7 @@ export async function uploadEventMediaToDrive(params: {
           const blobRes = await fetch(item.url);
           const blobData = await blobRes.blob();
           base64 = await fileToBase64(new File([blobData], item.name, { type: blobData.type }));
-        } catch (_) {}
+        } catch {}
       } else if (item.url && item.url.startsWith('data:')) {
         base64 = item.url.split(',')[1] || '';
       }
@@ -376,7 +376,7 @@ export async function uploadEventMediaToDrive(params: {
     let createData: any = null;
     try {
       createData = JSON.parse(createText);
-    } catch (_) {
+    } catch {
       throw new Error('Google Apps Script geçerli bir yanıt döndürmedi.');
     }
 

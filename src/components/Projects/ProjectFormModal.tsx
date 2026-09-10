@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ProjectEvent, UserProfile, AcademicYear } from '../../types';
 import { DEPARTMENTS, SDG_GOALS, SCHOOL_LEVELS } from '../../constants';
-import { X, Plus, Sparkles, Calendar, MapPin, Package, Check, GraduationCap, Atom, School, AlertCircle, Users, UserCheck } from 'lucide-react';
+import { X, Plus, Sparkles, Calendar, Check, GraduationCap, Atom, School, AlertCircle, Users, UserCheck } from 'lucide-react';
 
 interface ProjectFormModalProps {
   isOpen: boolean;
@@ -267,19 +267,16 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
       return;
     }
 
-    // Aktif Eğitim-Öğretim Yılı Tarih Kontrolü
+    // Aktif Eğitim-Öğretim Yılı Tarih Kontrolü & Bilgilendirme
     if (activeAcademicYear) {
-      if (startDate < activeAcademicYear.startDate || startDate > activeAcademicYear.endDate) {
-        alert(
-          `Başlangıç tarihi aktif eğitim-öğretim yılı (${activeAcademicYear.name}: ${activeAcademicYear.startDate.split('-').reverse().join('.')} – ${activeAcademicYear.endDate.split('-').reverse().join('.')}) sınırları içinde olmalıdır.`
+      const isStartOutside = startDate < activeAcademicYear.startDate || startDate > activeAcademicYear.endDate;
+      const isEndOutside = !!(endDate && (endDate < activeAcademicYear.startDate || endDate > activeAcademicYear.endDate));
+      
+      if (isStartOutside || isEndOutside) {
+        const proceed = window.confirm(
+          `Bilgilendirme: Belirttiğiniz etkinlik tarihi (${startDate}${endDate ? ' – ' + endDate : ''}), aktif eğitim-öğretim yılı (${activeAcademicYear.name}: ${activeAcademicYear.startDate.split('-').reverse().join('.')} – ${activeAcademicYear.endDate.split('-').reverse().join('.')}) sınırları dışındadır.\n\nYine de projeyi kaydetmek istiyor musunuz?`
         );
-        return;
-      }
-      if (endDate && (endDate < activeAcademicYear.startDate || endDate > activeAcademicYear.endDate)) {
-        alert(
-          `Bitiş tarihi aktif eğitim-öğretim yılı (${activeAcademicYear.name}: ${activeAcademicYear.startDate.split('-').reverse().join('.')} – ${activeAcademicYear.endDate.split('-').reverse().join('.')}) sınırları içinde olmalıdır.`
-        );
-        return;
+        if (!proceed) return;
       }
     }
     if (endDate && endDate < startDate) {

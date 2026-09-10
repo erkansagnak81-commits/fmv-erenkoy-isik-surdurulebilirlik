@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CampusMetric, UserProfile } from '../../types';
+import { CampusMetric, UserProfile, AcademicYear } from '../../types';
 import { calculateCarbonAnalysis } from '../../lib/carbonCalculator';
 import { exportCampusMetricsToCsv } from '../../lib/exportUtils';
 import { 
@@ -32,6 +32,7 @@ interface CampusMetricsViewProps {
   onDeleteMetric?: (metricId: string) => void;
   onClearMetrics?: () => void;
   currentUser: UserProfile;
+  activeAcademicYear?: AcademicYear;
 }
 
 export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
@@ -41,6 +42,7 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
   onDeleteMetric,
   onClearMetrics,
   currentUser,
+  activeAcademicYear,
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
@@ -62,12 +64,28 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
   const [specialEwasteKg, setSpecialEwasteKg] = useState<number>(0);
   const [notes, setNotes] = useState('');
 
-  // Sıralı metrikler
-  const sortedMetrics = [...metrics].sort((a, b) => a.period.localeCompare(b.period));
-  const latest = sortedMetrics[sortedMetrics.length - 1];
+  // Rapor Kapsamı: 'year' (Aktif Eğitim-Öğretim Yılı) veya 'all' (Tüm Dönemler / Kümülatif)
+  const [scopeMode, setScopeMode] = useState<'year' | 'all'>('year');
+
+  // Sıralı tüm metrikler
+  const sortedMetrics = React.useMemo(() => {
+    return [...metrics].sort((a, b) => a.period.localeCompare(b.period));
+  }, [metrics]);
+
+  // Aktif eğitim yılına göre filtrelenmiş metrikler
+  const scopedMetrics = React.useMemo(() => {
+    if (scopeMode === 'year' && activeAcademicYear) {
+      const startMonth = activeAcademicYear.startDate.slice(0, 7);
+      const endMonth = activeAcademicYear.endDate.slice(0, 7);
+      return sortedMetrics.filter(m => m.period >= startMonth && m.period <= endMonth);
+    }
+    return sortedMetrics;
+  }, [sortedMetrics, scopeMode, activeAcademicYear]);
+
+  const latest = scopedMetrics[scopedMetrics.length - 1] || sortedMetrics[sortedMetrics.length - 1];
 
   // Karbon ve Çevresel Etki Analizi
-  const carbonAnalysis = calculateCarbonAnalysis(sortedMetrics);
+  const carbonAnalysis = calculateCarbonAnalysis(scopedMetrics, activeAcademicYear?.totalStudents || 850);
 
   const handleOpenNewModal = () => {
     setEditingMetric(null);
@@ -106,7 +124,7 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
 
     try {
       confetti({ particleCount: 50, spread: 60 });
-    } catch (_) {}
+    } catch {}
 
     if (editingMetric) {
       if (onUpdateMetric) {
@@ -157,12 +175,11 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
   };
 
   const handleExportCsv = () => {
-    exportCampusMetricsToCsv(sortedMetrics);
+    exportCampusMetricsToCsv(scopedMetrics);
   };
 
   // Grafik hesaplamaları
-  const maxElectricity = Math.max(...sortedMetrics.map(m => m.electricityKwh), 1);
-  const maxWater = Math.max(...sortedMetrics.map(m => m.waterM3), 1);
+  const maxElectricity = Math.max(...scopedMetrics.map(m => m.electricityKwh), 1);
 
   return (
     <div className="space-y-6">
@@ -183,10 +200,37 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
         </div>
 
         <div className="flex items-center flex-wrap gap-2">
-          {sortedMetrics.length > 0 && (
+          {activeAcademicYear && (
+            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs">
+              <button
+                type="button"
+                onClick={() => setScopeMode('year')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  scopeMode === 'year'
+                    ? 'bg-white text-teal-800 shadow-2xs font-bold'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                {activeAcademicYear.name}
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeMode('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  scopeMode === 'all'
+                    ? 'bg-white text-teal-800 shadow-2xs font-bold'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Tüm Dönemler
+              </button>
+            </div>
+          )}
+
+          {scopedMetrics.length > 0 && (
             <button
               onClick={handleExportCsv}
-              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
               title="Sayaç ve atık verilerini Excel / CSV olarak indir"
             >
               <Download className="w-3.5 h-3.5 text-slate-600" />
@@ -197,7 +241,7 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
           {metrics.length > 0 && canManage && onClearMetrics && (
             <button
               onClick={() => setConfirmClearOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Verileri Temizle</span>
@@ -206,7 +250,7 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
 
           <button
             onClick={handleOpenNewModal}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Aylık Sayaç / Atık Verisi Gir</span>
@@ -298,7 +342,7 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
       </div>
 
       {/* YENİ: OTOMATİK KARBON AYAK İZİ & BİRİM TÜKETİM HESAPLAYICI KARTLARI */}
-      {sortedMetrics.length > 0 && (
+      {scopedMetrics.length > 0 && (
         <div className="bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-950 text-white rounded-3xl p-6 shadow-xl border border-emerald-900/50 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-white/10 pb-4">
             <div className="flex items-center gap-2.5">
@@ -316,7 +360,7 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
             </div>
 
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-emerald-300 text-xs font-semibold backdrop-blur-xs">
-              <span>Mevcut: ~850 Öğrenci</span>
+              <span>Mevcut: ~{activeAcademicYear?.totalStudents || 850} Öğrenci</span>
             </div>
           </div>
 
@@ -418,7 +462,7 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
               </div>
 
               <div className="h-48 flex items-end justify-between gap-3 pt-6 px-2 border-b border-slate-100">
-                {sortedMetrics.map((m) => {
+                {scopedMetrics.map((m) => {
                   const heightPercent = Math.round((m.electricityKwh / maxElectricity) * 100);
                   return (
                     <div key={m.id} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
@@ -493,7 +537,7 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
                 <span>Kayıtlı Dönemler ve Tüketim Tablosu</span>
               </h3>
               <span className="text-xs font-semibold text-slate-500">
-                {metrics.length} Dönem Kayıtlı
+                {scopedMetrics.length} Dönem {scopeMode === 'year' && activeAcademicYear ? 'Seçili Yılda' : 'Kayıtlı'}
               </span>
             </div>
 
@@ -513,7 +557,7 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {sortedMetrics.map((m) => {
+                  {scopedMetrics.map((m) => {
                     const mRecycled = m.recyclingPaperKg + m.recyclingPlasticKg + m.recyclingGlassKg + m.recyclingMetalKg + m.compostOrganicKg + m.specialEwasteKg;
                     return (
                       <tr key={m.id} className="hover:bg-slate-50/60 transition-colors">

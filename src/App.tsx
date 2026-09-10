@@ -202,10 +202,11 @@ export function App() {
         const liveProfiles = await dbService.getProfiles();
         if (liveProfiles && liveProfiles.length > 0) {
           setProfiles(liveProfiles);
-          if (authUser) {
-            const fresh = liveProfiles.find(p => p.email.toLowerCase() === authUser.email.toLowerCase());
-            if (fresh) setAuthUser(fresh);
-          }
+          setAuthUser(prev => {
+            if (!prev) return null;
+            const fresh = liveProfiles.find(p => p.email.toLowerCase() === prev.email.toLowerCase());
+            return fresh || prev;
+          });
         }
       } catch (err) {
         console.warn('Profiller yüklenemedi:', err);
@@ -851,6 +852,7 @@ export function App() {
               onDeleteMetric={handleDeleteCampusMetric}
               onClearMetrics={handleClearCampusMetrics}
               currentUser={currentUser}
+              activeAcademicYear={activeAcademicYear}
             />
           )}
 
