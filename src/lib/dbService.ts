@@ -1,407 +1,857 @@
-import { supabase, isSupabaseConfigured } from './supabase';
-import { ProjectEvent, CurriculumIntegration, CampusMetric, ProjectStatus, ImpactReport } from '../types';
-import { INITIAL_PROJECTS, INITIAL_CURRICULUM, INITIAL_CAMPUS_METRICS, DEPARTMENTS } from '../data/mockData';
+import { db, auth, googleProvider, isFirebaseConfigured } from './firebase';
+import { 
+  collection, 
+  getDocs, 
+  doc, 
+  setDoc, 
+  getDoc,
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  orderBy 
+} from 'firebase/firestore';
+import { signInWithPopup, signOut } from 'firebase/auth';
+import { 
+  ProjectEvent, 
+  CurriculumIntegration, 
+  CampusMetric, 
+  ProjectStatus, 
+  ImpactReport, 
+  UserProfile,
+  AcademicYear 
+} from '../types';
+import { DEPARTMENTS } from '../constants';
+import { 
+  INITIAL_PROJECTS, 
+  INITIAL_CURRICULUM, 
+  INITIAL_CAMPUS_METRICS, 
+  INITIAL_PROFILES 
+} from '../data/initialData';
 
-// Bölüm kodunu Supabase UUID'sine eşleştiren yardımcı önbellek
-let cachedDeptMap: Record<string, string> = {};
-
-async function resolveDeptId(rawDeptId: string): Promise<string> {
-  // Zaten geçerli bir UUID ise doğrudan kullan
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (uuidRegex.test(rawDeptId)) {
-    return rawDeptId;
+export const INITIAL_ACADEMIC_YEARS: AcademicYear[] = [
+  {
+    id: '2025-2026',
+    name: '2025-2026 Eğitim-Öğretim Yılı',
+    startDate: '2025-09-08',
+    endDate: '2026-06-19',
+    isActive: false,
+    totalStudents: 820,
+    description: 'Geçmiş Eğitim-Öğretim Yılı'
+  },
+  {
+    id: '2026-2027',
+    name: '2026-2027 Eğitim-Öğretim Yılı',
+    startDate: '2026-09-08',
+    endDate: '2027-06-18',
+    isActive: true,
+    totalStudents: 850,
+    description: 'Aktif Eğitim-Öğretim Yılı'
+  },
+  {
+    id: '2027-2028',
+    name: '2027-2028 Eğitim-Öğretim Yılı',
+    startDate: '2027-09-06',
+    endDate: '2028-06-16',
+    isActive: false,
+    totalStudents: 880,
+    description: 'Gelecek Eğitim-Öğretim Yılı'
   }
+];
 
-  if (!supabase) return rawDeptId;
+const PROFILES_STORAGE_KEY = 'ecocampus_profiles_v1';
+const PROJECTS_STORAGE_KEY = 'ecocampus_projects_v2';
+const CURRICULUM_STORAGE_KEY = 'ecocampus_curriculums_v2';
+const METRICS_STORAGE_KEY = 'ecocampus_metrics_v2';
+const ACADEMIC_YEARS_STORAGE_KEY = 'ecocampus_academic_years_v1';
 
-  // Önbellek boşsa Supabase'den çek
-  if (Object.keys(cachedDeptMap).length === 0) {
-    const { data } = await supabase.from('departments').select('id, code');
-    if (data && data.length > 0) {
-      data.forEach(d => { cachedDeptMap[d.code] = d.id; });
+function getLocalAcademicYears(): AcademicYear[] {
+  try {
+    const raw = localStorage.getItem(ACADEMIC_YEARS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
+  } catch (e) {
+    console.error('Error reading local academic years', e);
   }
+  saveLocalAcademicYears(INITIAL_ACADEMIC_YEARS);
+  return INITIAL_ACADEMIC_YEARS;
+}
 
-  // 'dept-1' gibi mock ID'den koda dönüştür
-  const mockDept = DEPARTMENTS.find(d => d.id === rawDeptId);
-  const code = mockDept?.code || 'FEN';
+function saveLocalAcademicYears(years: AcademicYear[]): void {
+  try {
+    localStorage.setItem(ACADEMIC_YEARS_STORAGE_KEY, JSON.stringify(years));
+  } catch (e) {
+    console.error('Error saving local academic years', e);
+  }
+}
 
-  return cachedDeptMap[code] || Object.values(cachedDeptMap)[0] || rawDeptId;
+function getLocalProfiles(): UserProfile[] {
+  try {
+    const raw = localStorage.getItem(PROFILES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((p: UserProfile) => {
+          if (p.role === 'coordinator' || p.role === 'admin') {
+            return { ...p, departmentId: '' };
+          }
+          return p;
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Error reading local profiles', e);
+  }
+  saveLocalProfiles(INITIAL_PROFILES);
+  return INITIAL_PROFILES;
+}
+
+function saveLocalProfiles(profiles: UserProfile[]): void {
+  try {
+    localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
+  } catch (e) {
+    console.error('Error saving local profiles', e);
+  }
+}
+
+function getLocalProjects(): ProjectEvent[] {
+  try {
+    const raw = localStorage.getItem(PROJECTS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.error('Error reading local projects', e);
+  }
+  saveLocalProjects(INITIAL_PROJECTS);
+  return INITIAL_PROJECTS;
+}
+
+function saveLocalProjects(projects: ProjectEvent[]): void {
+  try {
+    localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
+  } catch (e) {
+    console.error('Error saving local projects', e);
+  }
+}
+
+function getLocalCurriculums(): CurriculumIntegration[] {
+  try {
+    const raw = localStorage.getItem(CURRICULUM_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.error('Error reading local curriculums', e);
+  }
+  saveLocalCurriculums(INITIAL_CURRICULUM);
+  return INITIAL_CURRICULUM;
+}
+
+function saveLocalCurriculums(curriculums: CurriculumIntegration[]): void {
+  try {
+    localStorage.setItem(CURRICULUM_STORAGE_KEY, JSON.stringify(curriculums));
+  } catch (e) {
+    console.error('Error saving local curriculums', e);
+  }
+}
+
+function getLocalCampusMetrics(): CampusMetric[] {
+  try {
+    const raw = localStorage.getItem(METRICS_STORAGE_KEY);
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Error reading local campus metrics', e);
+  }
+  saveLocalCampusMetrics([]);
+  return [];
+}
+
+function saveLocalCampusMetrics(metrics: CampusMetric[]): void {
+  try {
+    localStorage.setItem(METRICS_STORAGE_KEY, JSON.stringify(metrics));
+  } catch (e) {
+    console.error('Error saving local campus metrics', e);
+  }
 }
 
 export const dbService = {
-  // Projeleri Getir
+  // Yerel Depolama Senkron Erişimcileri
+  getLocalProjects,
+  saveLocalProjects,
+  getLocalCurriculums,
+  saveLocalCurriculums,
+  getLocalCampusMetrics,
+  saveLocalCampusMetrics,
+  getLocalProfiles,
+  saveLocalProfiles,
+
+  // 1. PROJELERİ GETİR
   async getProjects(): Promise<{ data: ProjectEvent[]; fromLive: boolean }> {
-    if (!isSupabaseConfigured || !supabase) {
-      return { data: INITIAL_PROJECTS, fromLive: false };
+    const locals = getLocalProjects();
+
+    if (!isFirebaseConfigured || !db) {
+      return { data: locals, fromLive: false };
     }
 
     try {
-      const { data: projData, error: projError } = await supabase
-        .from('projects_events')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const q = query(collection(db, 'projects_events'), orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
 
-      if (projError || !projData || projData.length === 0) {
-        return { data: INITIAL_PROJECTS, fromLive: false };
+      if (snapshot.empty) {
+        // Firestore koleksiyonu boş ise başlangıç/yerel projeleri Firestore'a tohumlayalım
+        for (const p of locals) {
+          try {
+            await setDoc(doc(db, 'projects_events', p.id), p);
+          } catch (_) {}
+        }
+        return { data: locals, fromLive: true };
       }
 
-      // Raporları al
-      const { data: repData } = await supabase
-        .from('event_reports')
-        .select('*');
+      const remoteProjects: ProjectEvent[] = snapshot.docs.map(docSnap => ({
+        ...(docSnap.data() as ProjectEvent),
+        id: docSnap.id,
+      }));
 
-      const mapped: ProjectEvent[] = projData.map(p => {
-        const report = repData?.find(r => r.project_id === p.id);
-        let impactReport: ImpactReport | undefined;
+      // Remote'daki projeler ile varsa yalnızca yerelde bulunanları birleştir
+      const remoteIds = new Set(remoteProjects.map(p => p.id));
+      const localOnly = locals.filter(p => !remoteIds.has(p.id));
+      const merged = [...remoteProjects, ...localOnly];
 
-        if (report) {
-          impactReport = {
-            id: report.id,
-            projectId: report.project_id,
-            actualParticipants: report.actual_participants,
-            impactMetricValue: report.impact_metric_value,
-            impactMetricUnit: report.impact_metric_unit,
-            evaluationNotes: report.evaluation_notes,
-            photoUrls: report.photo_urls,
-            completedAt: report.completed_at,
-          };
-        }
-
-        return {
-          id: p.id,
-          title: p.title,
-          description: p.description,
-          departmentId: p.department_id,
-          advisorId: p.advisor_id || '',
-          advisorName: p.advisor_name,
-          eventType: p.event_type as any,
-          sdgGoals: p.sdg_goals || [],
-          targetGrades: p.target_grades || [],
-          startDate: p.start_date,
-          endDate: p.end_date,
-          location: p.location,
-          resourceNeeds: p.resource_needs,
-          status: p.status as ProjectStatus,
-          rejectionFeedback: p.rejection_feedback,
-          createdAt: p.created_at,
-          impactReport,
-        };
-      });
-
-      return { data: mapped, fromLive: true };
+      saveLocalProjects(merged);
+      return { data: merged, fromLive: true };
     } catch (err) {
-      console.warn('Supabase getProjects fallback to initial data:', err);
-      return { data: INITIAL_PROJECTS, fromLive: false };
+      console.warn('Firebase getProjects fallback to local data:', err);
+      return { data: locals, fromLive: false };
     }
   },
 
-  // Yeni Proje Kaydet
+  // 2. YENİ PROJE KAYDET
   async createProject(project: Omit<ProjectEvent, 'id' | 'createdAt'>): Promise<string> {
-    if (!isSupabaseConfigured || !supabase) {
-      return `proj-${Date.now()}`;
-    }
+    const tempId = `proj-${Date.now()}`;
+    const newProject: ProjectEvent = {
+      ...project,
+      id: tempId,
+      createdAt: new Date().toISOString(),
+    };
 
-    try {
-      const realDeptId = await resolveDeptId(project.departmentId);
+    // 1. Derhal yerel belleğe ve localStorage'a kaydet (Asla kaybolmaz)
+    const locals = getLocalProjects();
+    const updated = [newProject, ...locals.filter(p => p.id !== tempId)];
+    saveLocalProjects(updated);
 
-      const { data, error } = await supabase
-        .from('projects_events')
-        .insert({
-          title: project.title,
-          description: project.description,
-          department_id: realDeptId,
-          advisor_name: project.advisorName,
-          advisor_id: project.advisorId || '',
-          event_type: project.eventType,
-          sdg_goals: project.sdgGoals,
-          target_grades: project.targetGrades,
-          start_date: project.startDate,
-          end_date: project.endDate || null,
-          location: project.location,
-          resource_needs: project.resourceNeeds || null,
-          status: project.status,
-        })
-        .select('id')
-        .single();
-
-      if (error) {
-        console.error('Supabase createProject error:', error);
-        return `proj-${Date.now()}`;
+    // 2. Firebase Firestore ile arka planda eşitle
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'projects_events', tempId), newProject);
+        return tempId;
+      } catch (e) {
+        console.error('Firebase createProject error:', e);
       }
-
-      return data.id;
-    } catch (e) {
-      console.error('Supabase createProject exception:', e);
-      return `proj-${Date.now()}`;
     }
+
+    return tempId;
   },
 
-  // Proje Durumu Güncelle (Onay / Revizyon)
-  async updateProjectStatus(projectId: string, status: ProjectStatus, feedback?: string) {
-    if (!isSupabaseConfigured || !supabase) return;
+  // 3. PROJE BİLGİLERİNİ GÜNCELLE (TASLAK DÜZENLEME / REVİZYON)
+  async updateProject(
+    projectId: string, 
+    updates: Partial<ProjectEvent>
+  ): Promise<boolean> {
+    // 1. Derhal yerel belleği ve localStorage'ı güncelle
+    const locals = getLocalProjects();
+    const updated = locals.map(p => p.id === projectId ? { ...p, ...updates } : p);
+    saveLocalProjects(updated);
 
-    try {
-      const payload: any = { status };
-      if (feedback !== undefined) {
-        payload.rejection_feedback = feedback;
+    // 2. Firebase Firestore ile güvenli (merge: true) eşitle
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = doc(db, 'projects_events', projectId);
+        await setDoc(docRef, updates, { merge: true });
+        return true;
+      } catch (e) {
+        console.error('Firebase updateProject error:', e);
       }
-
-      const { error } = await supabase
-        .from('projects_events')
-        .update(payload)
-        .eq('id', projectId);
-
-      if (error) console.error('Supabase updateStatus error:', error);
-    } catch (e) {
-      console.error('Supabase updateStatus exception:', e);
     }
+    return true;
   },
 
-  // Etki Raporu Kaydet
-  async saveImpactReport(projectId: string, report: Omit<ImpactReport, 'id' | 'completedAt'>) {
-    if (!isSupabaseConfigured || !supabase) return;
+  // 4. PROJE DURUMU GÜNCELLE (ONAY / REVİZYON / TAKVİME ALMA)
+  async updateProjectStatus(
+    projectId: string, 
+    status: ProjectStatus, 
+    feedback?: string
+  ): Promise<boolean> {
+    // 1. Derhal yerel belleği ve localStorage'ı güncelle
+    const locals = getLocalProjects();
+    const updated = locals.map(p => {
+      if (p.id === projectId) {
+        const item: ProjectEvent = { ...p, status };
+        if (feedback !== undefined) {
+          item.rejectionFeedback = feedback;
+        } else if (status === 'coordinator_approved' || status === 'dept_approved') {
+          delete item.rejectionFeedback;
+        }
+        return item;
+      }
+      return p;
+    });
+    saveLocalProjects(updated);
 
-    try {
-      await supabase
-        .from('projects_events')
-        .update({ status: 'completed' })
-        .eq('id', projectId);
-
-      const { error } = await supabase
-        .from('event_reports')
-        .insert({
-          project_id: projectId,
-          actual_participants: report.actualParticipants,
-          impact_metric_value: report.impactMetricValue || 0,
-          impact_metric_unit: report.impactMetricUnit || '',
-          evaluation_notes: report.evaluationNotes || '',
-          photo_urls: report.photoUrls || [],
-        });
-
-      if (error) console.error('Supabase saveImpactReport error:', error);
-    } catch (e) {
-      console.error('Supabase saveImpactReport exception:', e);
+    // 2. Firebase Firestore ile eşitle (merge: true ile doküman yoksa da oluşturur)
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = doc(db, 'projects_events', projectId);
+        const updates: any = { status };
+        if (feedback !== undefined) {
+          updates.rejectionFeedback = feedback;
+        }
+        await setDoc(docRef, updates, { merge: true });
+        return true;
+      } catch (e) {
+        console.error('Firebase updateProjectStatus error:', e);
+      }
     }
+    return true;
   },
 
-  // Müfredat Verilerini Getir
+  // 4. ETKİ DEĞERLENDİRME RAPORU KAYDET
+  async saveImpactReport(projectId: string, report: Omit<ImpactReport, 'id' | 'projectId' | 'completedAt'>): Promise<boolean> {
+    const fullReport: ImpactReport = {
+      ...report,
+      id: `rep-${Date.now()}`,
+      projectId,
+      completedAt: new Date().toISOString(),
+    };
+
+    // 1. Derhal yerel belleği güncelle
+    const locals = getLocalProjects();
+    const updated = locals.map(p => {
+      if (p.id === projectId) {
+        return {
+          ...p,
+          status: 'completed' as ProjectStatus,
+          impactReport: fullReport,
+        };
+      }
+      return p;
+    });
+    saveLocalProjects(updated);
+
+    // 2. Firebase Firestore ile eşitle
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = doc(db, 'projects_events', projectId);
+        await setDoc(docRef, {
+          status: 'completed',
+          impactReport: fullReport,
+        }, { merge: true });
+        return true;
+      } catch (e) {
+        console.error('Firebase saveImpactReport error:', e);
+      }
+    }
+    return true;
+  },
+
+  // 4.1 PROJE SİL
+  async deleteProject(projectId: string): Promise<boolean> {
+    const locals = getLocalProjects();
+    const filtered = locals.filter(p => p.id !== projectId);
+    saveLocalProjects(filtered);
+
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, 'projects_events', projectId));
+      } catch (e) {
+        console.error('Firebase deleteProject error:', e);
+      }
+    }
+    return true;
+  },
+
+  // 5. MÜFREDAT ENTEGRASYONLARI
   async getCurriculums(): Promise<CurriculumIntegration[]> {
-    if (!isSupabaseConfigured || !supabase) return INITIAL_CURRICULUM;
+    const locals = getLocalCurriculums();
+    if (!isFirebaseConfigured || !db) {
+      return locals;
+    }
 
     try {
-      const { data, error } = await supabase
-        .from('curriculum_integrations')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const snapshot = await getDocs(collection(db, 'curriculum_integrations'));
+      if (snapshot.empty) {
+        for (const c of locals) {
+          try {
+            await setDoc(doc(db, 'curriculum_integrations', c.id), c);
+          } catch (_) {}
+        }
+        return locals;
+      }
 
-      if (error || !data || data.length === 0) return INITIAL_CURRICULUM;
-
-      return data.map(c => ({
-        id: c.id,
-        departmentId: c.department_id,
-        teacherName: c.teacher_name,
-        courseName: c.course_name,
-        gradeLevel: c.grade_level,
-        learningOutcome: c.learning_outcome,
-        sdgGoals: c.sdg_goals || [],
-        activityDescription: c.activity_description,
-        studentCount: c.student_count,
-        academicTerm: c.academic_term,
+      const remoteCurr: CurriculumIntegration[] = snapshot.docs.map(docSnap => ({
+        ...(docSnap.data() as CurriculumIntegration),
+        id: docSnap.id,
       }));
+      saveLocalCurriculums(remoteCurr);
+      return remoteCurr;
     } catch (err) {
-      console.warn('Supabase getCurriculums fallback:', err);
-      return INITIAL_CURRICULUM;
+      console.warn('Firebase getCurriculums fallback to local:', err);
+      return locals;
     }
   },
 
-  // Yeni Müfredat Ekle
-  async createCurriculum(curr: Omit<CurriculumIntegration, 'id'>) {
-    if (!isSupabaseConfigured || !supabase) return;
+  async createCurriculum(curriculum: Omit<CurriculumIntegration, 'id'>): Promise<string> {
+    const tempId = `curr-${Date.now()}`;
+    const newCurr: CurriculumIntegration = {
+      ...curriculum,
+      id: tempId,
+    };
+    const locals = getLocalCurriculums();
+    saveLocalCurriculums([newCurr, ...locals]);
 
-    try {
-      const realDeptId = await resolveDeptId(curr.departmentId);
-      await supabase.from('curriculum_integrations').insert({
-        department_id: realDeptId,
-        teacher_name: curr.teacherName,
-        course_name: curr.courseName,
-        grade_level: curr.gradeLevel,
-        learning_outcome: curr.learningOutcome,
-        sdg_goals: curr.sdgGoals,
-        activity_description: curr.activityDescription,
-        student_count: curr.studentCount,
-        academic_term: curr.academicTerm,
-      });
-    } catch (e) {
-      console.error('Supabase createCurriculum exception:', e);
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'curriculum_integrations', tempId), newCurr);
+      } catch (e) {
+        console.error('Firebase createCurriculum error:', e);
+      }
     }
+    return tempId;
   },
 
-  // Kampüs Metriklerini Getir
+  async updateCurriculum(curriculumId: string, updates: Partial<CurriculumIntegration>): Promise<boolean> {
+    const locals = getLocalCurriculums();
+    const updated = locals.map(c => {
+      if (c.id === curriculumId) {
+        return { ...c, ...updates };
+      }
+      return c;
+    });
+    saveLocalCurriculums(updated);
+
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = doc(db, 'curriculum_integrations', curriculumId);
+        await setDoc(docRef, updates, { merge: true });
+        return true;
+      } catch (e) {
+        console.error('Firebase updateCurriculum error:', e);
+      }
+    }
+    return true;
+  },
+
+  async deleteCurriculum(curriculumId: string): Promise<boolean> {
+    const locals = getLocalCurriculums();
+    const filtered = locals.filter(c => c.id !== curriculumId);
+    saveLocalCurriculums(filtered);
+
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, 'curriculum_integrations', curriculumId));
+        return true;
+      } catch (e) {
+        console.error('Firebase deleteCurriculum error:', e);
+      }
+    }
+    return true;
+  },
+
+  // 6. KAMPÜS METRİKLERİ
   async getCampusMetrics(): Promise<CampusMetric[]> {
-    if (!isSupabaseConfigured || !supabase) return INITIAL_CAMPUS_METRICS;
+    const locals = getLocalCampusMetrics();
+    if (!isFirebaseConfigured || !db) {
+      return locals;
+    }
 
     try {
-      const { data, error } = await supabase
-        .from('campus_metrics')
-        .select('*')
-        .order('period', { ascending: true });
+      const snapshot = await getDocs(collection(db, 'campus_metrics'));
+      if (snapshot.empty) {
+        saveLocalCampusMetrics([]);
+        return [];
+      }
 
-      if (error || !data || data.length === 0) return INITIAL_CAMPUS_METRICS;
-
-      return data.map(m => ({
-        id: m.id,
-        period: m.period,
-        electricityKwh: Number(m.electricity_kwh),
-        waterM3: Number(m.water_m3),
-        paperReams: Number(m.paper_reams),
-        recyclingPaperKg: Number(m.recycling_paper_kg),
-        recyclingPlasticKg: Number(m.recycling_plastic_kg),
-        recyclingGlassKg: Number(m.recycling_glass_kg),
-        recyclingMetalKg: Number(m.recycling_metal_kg),
-        compostOrganicKg: Number(m.compost_organic_kg),
-        specialEwasteKg: Number(m.special_ewaste_kg),
-        notes: m.notes,
+      const remoteMetrics: CampusMetric[] = snapshot.docs.map(docSnap => ({
+        ...(docSnap.data() as CampusMetric),
+        id: docSnap.id,
       }));
+
+      saveLocalCampusMetrics(remoteMetrics);
+      return remoteMetrics;
     } catch (err) {
-      console.warn('Supabase getCampusMetrics fallback:', err);
-      return INITIAL_CAMPUS_METRICS;
+      console.warn('Firebase getCampusMetrics fallback to local:', err);
+      return locals;
     }
   },
 
-  // Yeni Kampüs Metriği Ekle
-  async createCampusMetric(metric: Omit<CampusMetric, 'id'>) {
-    if (!isSupabaseConfigured || !supabase) return;
+  async createCampusMetric(metric: Omit<CampusMetric, 'id'>, customId?: string): Promise<string> {
+    const tempId = customId || `met-${Date.now()}`;
+    const newMet: CampusMetric = {
+      ...metric,
+      id: tempId,
+      notes: metric.notes || '',
+    };
+    const locals = getLocalCampusMetrics();
+    const existIdx = locals.findIndex(m => m.id === tempId || m.period === newMet.period);
+    if (existIdx !== -1) {
+      locals[existIdx] = newMet;
+      saveLocalCampusMetrics(locals);
+    } else {
+      saveLocalCampusMetrics([...locals, newMet]);
+    }
+
+    if (isFirebaseConfigured && db) {
+      try {
+        const firestoreData: any = {};
+        for (const [k, v] of Object.entries(newMet)) {
+          if (v !== undefined) firestoreData[k] = v;
+        }
+        await setDoc(doc(db, 'campus_metrics', tempId), firestoreData);
+      } catch (e) {
+        console.error('Firebase createCampusMetric error:', e);
+      }
+    }
+    return tempId;
+  },
+
+  async updateCampusMetric(metric: CampusMetric): Promise<boolean> {
+    const cleanMetric: CampusMetric = {
+      ...metric,
+      notes: metric.notes || '',
+    };
+    const locals = getLocalCampusMetrics();
+    const index = locals.findIndex(m => m.id === metric.id || m.period === metric.period);
+    if (index !== -1) {
+      locals[index] = cleanMetric;
+    } else {
+      locals.push(cleanMetric);
+    }
+    saveLocalCampusMetrics(locals);
+
+    if (isFirebaseConfigured && db) {
+      try {
+        const firestoreData: any = {};
+        for (const [k, v] of Object.entries(cleanMetric)) {
+          if (v !== undefined) firestoreData[k] = v;
+        }
+        await setDoc(doc(db, 'campus_metrics', metric.id), firestoreData, { merge: true });
+      } catch (e) {
+        console.error('Firebase updateCampusMetric error:', e);
+      }
+    }
+    return true;
+  },
+
+  async deleteCampusMetric(metricId: string): Promise<boolean> {
+    const locals = getLocalCampusMetrics();
+    const filtered = locals.filter(m => m.id !== metricId);
+    saveLocalCampusMetrics(filtered);
+
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, 'campus_metrics', metricId));
+      } catch (e) {
+        console.error('Firebase deleteCampusMetric error:', e);
+      }
+    }
+    return true;
+  },
+
+  async clearCampusMetrics(): Promise<boolean> {
+    saveLocalCampusMetrics([]);
+    if (isFirebaseConfigured && db) {
+      try {
+        const snap = await getDocs(collection(db, 'campus_metrics'));
+        for (const d of snap.docs) {
+          await deleteDoc(d.ref);
+        }
+      } catch (e) {
+        console.error('Firebase clearCampusMetrics error:', e);
+      }
+    }
+    return true;
+  },
+
+  // 7. KULLANICI & PROFİL YÖNETİMİ (CLOUDFIRESTORE)
+  async getProfiles(): Promise<UserProfile[]> {
+    if (!isFirebaseConfigured || !db) {
+      return getLocalProfiles();
+    }
 
     try {
-      await supabase.from('campus_metrics').insert({
-        period: metric.period,
-        electricity_kwh: metric.electricityKwh,
-        water_m3: metric.waterM3,
-        paper_reams: metric.paperReams,
-        recycling_paper_kg: metric.recyclingPaperKg,
-        recyclingPlasticKg: metric.recyclingPlasticKg,
-        recyclingGlassKg: metric.recyclingGlassKg,
-        recyclingMetalKg: metric.recyclingMetalKg,
-        compost_organic_kg: metric.compostOrganicKg,
-        special_ewaste_kg: metric.specialEwasteKg,
-        notes: metric.notes || null,
-      });
+      const snapshot = await getDocs(collection(db, 'profiles'));
+      if (snapshot.empty) {
+        // İlk açılışta yerel profilleri Firestore'a tohumlayalım
+        const locals = getLocalProfiles();
+        for (const p of locals) {
+          await setDoc(doc(db, 'profiles', p.id), p);
+        }
+        return locals;
+      }
+
+      const profiles: UserProfile[] = snapshot.docs.map(docSnap => ({
+        ...(docSnap.data() as UserProfile),
+        id: docSnap.id,
+      }));
+
+      saveLocalProfiles(profiles);
+      return profiles;
     } catch (e) {
-      console.error('Supabase createCampusMetric exception:', e);
+      console.warn('Firebase getProfiles hatası, yerel listeye dönülüyor:', e);
+      return getLocalProfiles();
     }
   },
 
-  // Supabase Boşsa Başlangıç Örnek Verilerini Yükleme Yardımcısı (Seed)
+  async getProfileByEmail(email: string): Promise<UserProfile | null> {
+    const cleanEmail = email.trim().toLowerCase();
+    const all = await this.getProfiles();
+    return all.find(p => p.email.toLowerCase() === cleanEmail) || null;
+  },
+
+  async createProfile(profileData: Omit<UserProfile, 'id'>): Promise<UserProfile> {
+    const tempId = `user-${Date.now()}`;
+    const newProfile: UserProfile = {
+      ...profileData,
+      id: tempId,
+      email: profileData.email.trim().toLowerCase(),
+      createdAt: new Date().toISOString(),
+      status: 'active',
+    };
+
+    const locals = getLocalProfiles();
+    saveLocalProfiles([newProfile, ...locals]);
+
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'profiles', tempId), newProfile);
+      } catch (e) {
+        console.error('Firebase createProfile error:', e);
+      }
+    }
+
+    return newProfile;
+  },
+
+  async updateProfile(id: string, updates: Partial<UserProfile>): Promise<boolean> {
+    const locals = getLocalProfiles();
+    const updatedLocals = locals.map(p => p.id === id ? { ...p, ...updates } : p);
+    saveLocalProfiles(updatedLocals);
+
+    if (isFirebaseConfigured && db) {
+      try {
+        await updateDoc(doc(db, 'profiles', id), updates);
+      } catch (e) {
+        console.error('Firebase updateProfile error:', e);
+        return false;
+      }
+    }
+    return true;
+  },
+
+  async deleteProfile(id: string): Promise<boolean> {
+    const locals = getLocalProfiles();
+    const filtered = locals.filter(p => p.id !== id);
+    saveLocalProfiles(filtered);
+
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, 'profiles', id));
+      } catch (e) {
+        console.error('Firebase deleteProfile error:', e);
+        return false;
+      }
+    }
+    return true;
+  },
+
+  // 8. GOOGLE OAUTH KİMLİK DOĞRULAMA (FIREBASE AUTH POPUP)
+  async signInWithGoogle(): Promise<{ user?: any; error?: any }> {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      return { user: result.user };
+    } catch (error: any) {
+      console.error('Firebase signInWithGoogle hatası:', error);
+      return { error };
+    }
+  },
+
+  async logOut(): Promise<void> {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error('Firebase signOut error:', e);
+    }
+  },
+
+  // 9. VERİTABANI İLK VERİLERİ YÜKLEME (SEED)
   async seedInitialData(): Promise<{ success: boolean; message: string }> {
-    if (!isSupabaseConfigured || !supabase) {
-      return { success: false, message: 'Supabase bağlantısı henüz yapılandırılmadı.' };
+    // 1. Yerel depolamayı temiz ve tam başlangıç verisiyle güncelle
+    saveLocalProjects(INITIAL_PROJECTS);
+    saveLocalCurriculums(INITIAL_CURRICULUM);
+    saveLocalCampusMetrics(INITIAL_CAMPUS_METRICS);
+    saveLocalProfiles(INITIAL_PROFILES);
+
+    if (!isFirebaseConfigured || !db) {
+      return { success: true, message: 'Örnek veriler yerel güvenli belleğe başarıyla yüklendi.' };
     }
 
     try {
-      // 1. Bölümleri kontrol et ve ekle
-      const { data: existingDepts } = await supabase.from('departments').select('id, code');
-      let deptMap: Record<string, string> = {};
-
-      if (existingDepts && existingDepts.length > 0) {
-        existingDepts.forEach(d => { deptMap[d.code] = d.id; });
-      } else {
-        const { data: insertedDepts } = await supabase
-          .from('departments')
-          .insert(DEPARTMENTS.map(d => ({
-            name: d.name,
-            code: d.code,
-            color: d.color,
-            head_name: d.headName,
-          })))
-          .select('id, code');
-
-        insertedDepts?.forEach(d => { deptMap[d.code] = d.id; });
-      }
-
-      cachedDeptMap = { ...deptMap };
-
-      // 2. Projeleri ekle
+      // 1. Projeleri Ekle
       for (const p of INITIAL_PROJECTS) {
-        const targetDeptCode = DEPARTMENTS.find(d => d.id === p.departmentId)?.code || 'FEN';
-        const deptId = deptMap[targetDeptCode] || Object.values(deptMap)[0];
-
-        const { data: newProj, error: pError } = await supabase
-          .from('projects_events')
-          .insert({
-            title: p.title,
-            description: p.description,
-            department_id: deptId,
-            advisor_name: p.advisorName,
-            advisor_id: p.advisorId || '',
-            event_type: p.eventType,
-            sdg_goals: p.sdgGoals,
-            target_grades: p.targetGrades,
-            start_date: p.startDate,
-            end_date: p.endDate || null,
-            location: p.location,
-            resource_needs: p.resourceNeeds || null,
-            status: p.status,
-            rejection_feedback: p.rejectionFeedback || null,
-          })
-          .select('id')
-          .single();
-
-        if (pError) {
-          console.error('Seed project error:', pError);
-        }
-
-        if (newProj && p.impactReport) {
-          await supabase.from('event_reports').insert({
-            project_id: newProj.id,
-            actual_participants: p.impactReport.actualParticipants,
-            impact_metric_value: p.impactReport.impactMetricValue || 0,
-            impact_metric_unit: p.impactReport.impactMetricUnit || '',
-            evaluation_notes: p.impactReport.evaluationNotes || '',
-            photo_urls: p.impactReport.photoUrls || [],
-          });
-        }
+        await setDoc(doc(db, 'projects_events', p.id), p);
       }
 
-      // 3. Müfredatı ekle
+      // 2. Müfredatı Ekle
       for (const c of INITIAL_CURRICULUM) {
-        const targetDeptCode = DEPARTMENTS.find(d => d.id === c.departmentId)?.code || 'FEN';
-        const deptId = deptMap[targetDeptCode] || Object.values(deptMap)[0];
-
-        await supabase.from('curriculum_integrations').insert({
-          department_id: deptId,
-          teacher_name: c.teacherName,
-          course_name: c.courseName,
-          grade_level: c.gradeLevel,
-          learning_outcome: c.learningOutcome,
-          sdg_goals: c.sdgGoals,
-          activity_description: c.activityDescription,
-          student_count: c.studentCount,
-          academic_term: c.academicTerm,
-        });
+        await setDoc(doc(db, 'curriculum_integrations', c.id), c);
       }
 
-      // 4. Metrikleri ekle
+      // 3. Metrikleri Ekle
       for (const m of INITIAL_CAMPUS_METRICS) {
-        await supabase.from('campus_metrics').insert({
-          period: m.period,
-          electricity_kwh: m.electricityKwh,
-          water_m3: m.waterM3,
-          paper_reams: m.paperReams,
-          recycling_paper_kg: m.recyclingPaperKg,
-          recycling_plastic_kg: m.recyclingPlasticKg,
-          recyclingGlassKg: m.recyclingGlassKg,
-          recyclingMetalKg: m.recyclingMetalKg,
-          compost_organic_kg: m.compostOrganicKg,
-          special_ewaste_kg: m.specialEwasteKg,
-          notes: m.notes || null,
-        });
+        await setDoc(doc(db, 'campus_metrics', m.id), m);
       }
 
-      return { success: true, message: 'Örnek veriler Supabase veritabanına başarıyla aktarıldı!' };
+      // 4. Profilleri Ekle
+      for (const prof of INITIAL_PROFILES) {
+        await setDoc(doc(db, 'profiles', prof.id), prof);
+      }
+
+      return { success: true, message: 'Örnek veriler Cloud Firestore veritabanına ve yerel depolamaya başarıyla aktarıldı!' };
     } catch (e: any) {
-      console.error('Seed exception:', e);
-      return { success: false, message: `Hata oluştu: ${e.message || 'Bilinmeyen hata'}` };
+      console.error('Firebase seed exception:', e);
+      return { success: true, message: `Yerel depolama güncellendi (Bulut senkronizasyonu uyarısı: ${e.message || 'Bilinmeyen hata'})` };
     }
+  },
+
+  // 10. DENEME VERİLERİNİ TEMİZLE (YALNIZCA KULLANICI PROFİLLERİ KORUNUR)
+  async clearTestData(): Promise<{ success: boolean; message: string }> {
+    saveLocalProjects([]);
+    saveLocalCurriculums([]);
+    saveLocalCampusMetrics([]);
+
+    if (!isFirebaseConfigured || !db) {
+      return { success: true, message: 'Yerel deneme verileri temizlendi.' };
+    }
+
+    try {
+      // 1. Projeleri Sil
+      const projSnap = await getDocs(collection(db, 'projects_events'));
+      for (const d of projSnap.docs) {
+        await deleteDoc(d.ref);
+      }
+
+      // 2. Müfredat Entegrasyonlarını Sil
+      const currSnap = await getDocs(collection(db, 'curriculum_integrations'));
+      for (const d of currSnap.docs) {
+        await deleteDoc(d.ref);
+      }
+
+      // 3. Kampüs Metriklerini Sil
+      const metSnap = await getDocs(collection(db, 'campus_metrics'));
+      for (const d of metSnap.docs) {
+        await deleteDoc(d.ref);
+      }
+
+      return { 
+        success: true, 
+        message: 'Deneme projeleri, müfredat planları ve kampüs metrikleri veritabanından ve yerel bellekten temizlendi.' 
+      };
+    } catch (e: any) {
+      console.error('Firebase clearTestData error:', e);
+      return { 
+        success: true, 
+        message: `Yerel veriler temizlendi, bulut temizliği uyarısı: ${e.message || 'Bilinmeyen hata'}` 
+      };
+    }
+  },
+
+  // 11. EĞİTİM-ÖĞRETİM YILLARI (ACADEMIC YEARS) YÖNETİMİ
+  async getAcademicYears(): Promise<AcademicYear[]> {
+    if (!isFirebaseConfigured || !db) {
+      return getLocalAcademicYears();
+    }
+    try {
+      const snapshot = await getDocs(collection(db, 'academic_years'));
+      if (snapshot.empty) {
+        const local = getLocalAcademicYears();
+        for (const y of local) {
+          await setDoc(doc(db, 'academic_years', y.id), y);
+        }
+        return local;
+      }
+      const years = snapshot.docs.map(doc => doc.data() as AcademicYear);
+      // Aktif yıla göre veya başlangıç tarihine göre sırala
+      years.sort((a, b) => a.startDate.localeCompare(b.startDate));
+      saveLocalAcademicYears(years);
+      return years;
+    } catch (e) {
+      console.warn('Firebase getAcademicYears failed, using local storage:', e);
+      return getLocalAcademicYears();
+    }
+  },
+
+  async getActiveAcademicYear(): Promise<AcademicYear> {
+    const years = await this.getAcademicYears();
+    const active = years.find(y => y.isActive) || years.find(y => y.id === '2026-2027') || years[0] || INITIAL_ACADEMIC_YEARS[1];
+    return active;
+  },
+
+  async saveAcademicYear(updatedYear: AcademicYear): Promise<AcademicYear[]> {
+    const currentYears = getLocalAcademicYears();
+    const idx = currentYears.findIndex(y => y.id === updatedYear.id);
+    let newYears: AcademicYear[];
+    if (idx >= 0) {
+      newYears = currentYears.map(y => y.id === updatedYear.id ? updatedYear : (updatedYear.isActive ? { ...y, isActive: false } : y));
+    } else {
+      newYears = [...currentYears, updatedYear];
+      if (updatedYear.isActive) {
+        newYears = newYears.map(y => y.id === updatedYear.id ? y : { ...y, isActive: false });
+      }
+    }
+    newYears.sort((a, b) => a.startDate.localeCompare(b.startDate));
+    saveLocalAcademicYears(newYears);
+
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'academic_years', updatedYear.id), updatedYear);
+        if (updatedYear.isActive) {
+          for (const y of newYears.filter(y => y.id !== updatedYear.id)) {
+            await setDoc(doc(db, 'academic_years', y.id), y);
+          }
+        }
+      } catch (e) {
+        console.error('Firebase saveAcademicYear error:', e);
+      }
+    }
+    return newYears;
+  },
+
+  async setActiveAcademicYear(yearId: string): Promise<AcademicYear[]> {
+    const currentYears = getLocalAcademicYears();
+    const updated = currentYears.map(y => ({
+      ...y,
+      isActive: y.id === yearId
+    }));
+    saveLocalAcademicYears(updated);
+
+    if (isFirebaseConfigured && db) {
+      try {
+        for (const y of updated) {
+          await setDoc(doc(db, 'academic_years', y.id), y);
+        }
+      } catch (e) {
+        console.error('Firebase setActiveAcademicYear error:', e);
+      }
+    }
+    return updated;
   }
 };
+

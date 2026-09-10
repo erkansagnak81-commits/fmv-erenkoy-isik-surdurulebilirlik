@@ -1,5 +1,5 @@
 import React from 'react';
-import { DEPARTMENTS } from '../../data/mockData';
+import { DEPARTMENTS } from '../../constants';
 import { ProjectEvent, CurriculumIntegration } from '../../types';
 import { Award, Layers, ArrowRight } from 'lucide-react';
 

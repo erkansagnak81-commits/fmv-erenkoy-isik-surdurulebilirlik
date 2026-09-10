@@ -1,48 +1,99 @@
 import React, { useState } from 'react';
 import { ProjectEvent, UserProfile, ProjectStatus } from '../../types';
-import { DEPARTMENTS, SDG_GOALS } from '../../data/mockData';
+import { DEPARTMENTS, SDG_GOALS, parseTargetGrades } from '../../constants';
+import { exportProjectsToCsv } from '../../lib/exportUtils';
+import { ProjectDetailModal } from './ProjectDetailModal';
 import { 
   Plus, 
   Search, 
   Filter, 
   Calendar, 
+  CalendarDays,
   MapPin, 
   User, 
   CheckCircle, 
   Clock, 
   AlertCircle, 
-  Award,
+  Award, 
   Sparkles,
-  FileCheck2
+  FileCheck2,
+  FileEdit,
+  GraduationCap,
+  Atom,
+  School,
+  Users,
+  Download,
+  Eye,
+  Globe2,
+  Info
 } from 'lucide-react';
 
 interface ProjectListProps {
   projects: ProjectEvent[];
   currentUser: UserProfile;
   onOpenNewModal: () => void;
+  onEditProject: (project: ProjectEvent) => void;
   onOpenReportModal: (project: ProjectEvent) => void;
   selectedSdgFilter: number | null;
   onClearSdgFilter: () => void;
+  onNavigateTab?: (tab: string) => void;
 }
 
 export const ProjectList: React.FC<ProjectListProps> = ({
   projects,
   currentUser,
   onOpenNewModal,
+  onEditProject,
   onOpenReportModal,
   selectedSdgFilter,
   onClearSdgFilter,
+  onNavigateTab,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  
+  // Kapsam Sekmesi: 'my' (Bireysel/Zümre) vs 'school' (Okul Geneli İlham Vitrini)
+  const [scopeTab, setScopeTab] = useState<'my' | 'school'>(() => {
+    if (currentUser.role === 'coordinator' || currentUser.role === 'admin') return 'school';
+    return 'my';
+  });
 
-  // Filtreleme
+  // Detay Modalı State
+  const [detailProject, setDetailProject] = useState<ProjectEvent | null>(null);
+
+  // Rol ve Kapsam Bazlı Filtreleme
   const filteredProjects = projects.filter(p => {
+    // 1. Kapsam Kontrolü
+    if (scopeTab === 'school') {
+      // Okul geneli vitrin: Yalnızca koordinatör onaylı (takvimde yayında) veya tamamlanmış projeler gösterilir
+      if (p.status !== 'coordinator_approved' && p.status !== 'completed') {
+        return false;
+      }
+    } else {
+      // 'my' kapsamı (Bireysel veya Zümre Odaklı)
+      if (currentUser.role === 'teacher') {
+        const isCollaborator = p.collaboratingTeachers?.some(t => 
+          t.toLowerCase().includes(currentUser.name.toLowerCase())
+        );
+        const isMyProject = 
+          p.advisorId === currentUser.id || 
+          p.advisorName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+          isCollaborator;
+        if (!isMyProject) return false;
+      } else if (currentUser.role === 'dept_head') {
+        const isDeptProject = p.departmentId === currentUser.departmentId;
+        if (!isDeptProject) return false;
+      }
+    }
+
     const matchesSearch = 
       p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.advisorName.toLowerCase().includes(searchTerm.toLowerCase());
+      p.advisorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.studentClub && p.studentClub.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      p.collaboratingTeachers?.some(t => t.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      p.studentRepresentatives?.some(r => r.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesStatus = 
       statusFilter === 'all' || p.status === statusFilter;
@@ -55,6 +106,56 @@ export const ProjectList: React.FC<ProjectListProps> = ({
 
     return matchesSearch && matchesStatus && matchesDept && matchesSdg;
   });
+
+  const schoolScopeCount = projects.filter(p => 
+    (selectedSdgFilter === null || p.sdgGoals.includes(selectedSdgFilter)) &&
+    (p.status === 'coordinator_approved' || p.status === 'completed')
+  ).length;
+
+  const poolScopeCount = projects.filter(p => {
+    if (selectedSdgFilter !== null && !p.sdgGoals.includes(selectedSdgFilter)) return false;
+    if (currentUser.role === 'teacher') {
+      const isCollaborator = p.collaboratingTeachers?.some(t => 
+        t.toLowerCase().includes(currentUser.name.toLowerCase())
+      );
+      return p.advisorId === currentUser.id || 
+        p.advisorName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+        isCollaborator;
+    } else if (currentUser.role === 'dept_head') {
+      return p.departmentId === currentUser.departmentId;
+    }
+    return true;
+  }).length;
+
+  const canEditProject = (project: ProjectEvent) => {
+    if (project.status !== 'draft' && project.status !== 'revision_needed') return false;
+    if (currentUser.role === 'coordinator' || currentUser.role === 'admin') return true;
+    if (currentUser.role === 'dept_head') return project.departmentId === currentUser.departmentId;
+    if (currentUser.role === 'teacher') {
+      const isCollaborator = project.collaboratingTeachers?.some(t => 
+        t.toLowerCase().includes(currentUser.name.toLowerCase())
+      );
+      return project.advisorId === currentUser.id || 
+        project.advisorName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+        !!isCollaborator;
+    }
+    return false;
+  };
+
+  const canReportProject = (project: ProjectEvent) => {
+    if (project.status !== 'coordinator_approved') return false;
+    if (currentUser.role === 'coordinator' || currentUser.role === 'admin') return true;
+    if (currentUser.role === 'dept_head') return project.departmentId === currentUser.departmentId;
+    if (currentUser.role === 'teacher') {
+      const isCollaborator = project.collaboratingTeachers?.some(t => 
+        t.toLowerCase().includes(currentUser.name.toLowerCase())
+      );
+      return project.advisorId === currentUser.id || 
+        project.advisorName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+        !!isCollaborator;
+    }
+    return false;
+  };
 
   const getStatusBadge = (status: ProjectStatus, feedback?: string) => {
     switch (status) {
@@ -69,7 +170,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
             <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
-            Bölüm Başkanı Onayı Bekliyor
+            Bölüm Başkanı Onayında
           </span>
         );
       case 'dept_approved':
@@ -106,26 +207,144 @@ export const ProjectList: React.FC<ProjectListProps> = ({
     }
   };
 
+  const handleExportCsv = () => {
+    exportProjectsToCsv(filteredProjects, DEPARTMENTS);
+  };
+
   return (
     <div className="space-y-5">
-      {/* Üst Bar: Başlık ve Ekle Butonu */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-card-soft">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-            Proje ve Etkinlik Havuzu
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Lisemizde planlanan, onay aşamasındaki ve tamamlanan tüm sürdürülebilirlik faaliyetleri
-          </p>
+      {/* Üst Bar: Başlık, Kapsam Sekmeleri ve Eylemler */}
+      <div className="flex flex-col gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-card-soft">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div>
+            <div className="flex items-center flex-wrap gap-2">
+              <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+                {scopeTab === 'school' 
+                  ? 'Okul Geneli Proje Havuzu & İlham Vitrini'
+                  : currentUser.role === 'teacher' 
+                  ? 'Bireysel Proje ve Faaliyetlerim' 
+                  : currentUser.role === 'dept_head' 
+                  ? `${DEPARTMENTS.find(d => d.id === currentUser.departmentId)?.name || 'Zümre'} Faaliyetleri` 
+                  : 'Proje ve Etkinlik Havuzu'}
+              </h2>
+              {scopeTab === 'school' ? (
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                  <Globe2 className="w-3 h-3 text-emerald-700" />
+                  <span>Tüm Zümreler (Onaylı Arşiv)</span>
+                </span>
+              ) : (
+                currentUser.role === 'teacher' ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                    Danışman Öğretmen: {currentUser.name}
+                  </span>
+                ) : currentUser.role === 'dept_head' ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                    Bölüm Başkanlığı: {DEPARTMENTS.find(d => d.id === currentUser.departmentId)?.code}
+                  </span>
+                ) : null
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {scopeTab === 'school'
+                ? 'FMV Erenköy Işık Lisesi ve Fen Lisesi zümrelerimizin okul takvimine onaylanmış ve tamamlanmış tüm sürdürülebilirlik projeleri.'
+                : currentUser.role === 'teacher'
+                ? 'Yalnızca danışmanlığını yürüttüğünüz taslak, onay aşamasındaki veya tamamlanmış faaliyetleriniz listelenmektedir.'
+                : 'Zümreniz bünyesindeki öğretmenlerin yürüttüğü ve onay bekleyen faaliyetler.'}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleExportCsv}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
+              title="Filtrelenmiş projeleri Excel / CSV formatında indir"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-600" />
+              <span>Excel / CSV</span>
+            </button>
+
+            {onNavigateTab && (
+              <button
+                onClick={() => onNavigateTab('calendar')}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 text-xs font-bold shadow-2xs transition-all cursor-pointer"
+                title="Onaylı etkinlikleri aylık takvimde incele"
+              >
+                <CalendarDays className="w-4 h-4 text-emerald-700" />
+                <span>Takvimde Gör</span>
+              </button>
+            )}
+
+            <button
+              onClick={onOpenNewModal}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm hover:shadow transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Yeni Proje Başlat</span>
+            </button>
+          </div>
         </div>
 
-        <button
-          onClick={onOpenNewModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold shadow-sm hover:shadow transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Yeni Proje / Etkinlik Öner</span>
-        </button>
+        {/* Sekme Geçişi: Okul Geneli Vitrin vs Bireysel / Zümre */}
+        <div className="flex items-center gap-2 border-t border-slate-100 pt-3">
+          <button
+            onClick={() => setScopeTab('school')}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              scopeTab === 'school'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Globe2 className="w-3.5 h-3.5" />
+            <span>Okul Geneli Vitrin (Onaylı Projeler)</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              scopeTab === 'school' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+            }`}>
+              {schoolScopeCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setScopeTab('my')}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              scopeTab === 'my'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>
+              {currentUser.role === 'teacher' 
+                ? 'Benim Faaliyetlerim' 
+                : currentUser.role === 'dept_head' 
+                ? 'Zümre Faaliyetleri' 
+                : 'Tüm Proje Havuzu (Hazırlık & Onay Süreci Dahil)'}
+            </span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              scopeTab === 'my' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+            }`}>
+              {poolScopeCount}
+            </span>
+          </button>
+        </div>
+
+        {/* SKA Filtresi Aktifken Bilgilendirme Notu */}
+        {selectedSdgFilter && scopeTab === 'school' && poolScopeCount > schoolScopeCount && (
+          <div className="flex items-center justify-between gap-3 p-3 bg-blue-50/90 border border-blue-200 rounded-xl text-xs text-blue-950 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>
+                <strong>SKA {selectedSdgFilter}</strong> kapsamında onaylanıp vitrine çıkan <strong>{schoolScopeCount} proje</strong> listeleniyor. 
+                Hazırlık ve onay sürecindeki diğer <strong>{poolScopeCount - schoolScopeCount} projeyi</strong> incelemek için <strong>"Tüm Proje Havuzu"</strong> sekmesine geçebilirsiniz.
+              </span>
+            </div>
+            <button
+              onClick={() => setScopeTab('my')}
+              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shrink-0 transition-colors cursor-pointer"
+            >
+              Tümünü Gör ({poolScopeCount})
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Arama ve Filtre Çubuğu */}
@@ -135,10 +354,10 @@ export const ProjectList: React.FC<ProjectListProps> = ({
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input 
-              type="text"
+              type="text" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Proje adı, açıklama veya öğretmen ara..."
+              placeholder="Proje başlığı, açıklama, kulüp, öğretmen veya öğrenci temsilcisi ara..."
               className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
             />
           </div>
@@ -167,18 +386,19 @@ export const ProjectList: React.FC<ProjectListProps> = ({
 
           {[
             { id: 'all', label: 'Tümü' },
-            { id: 'submitted', label: 'Bölüm Onayı Bekleyenler' },
-            { id: 'dept_approved', label: 'Koordinatörde' },
-            { id: 'coordinator_approved', label: 'Onaylı / Yayında' },
+            ...(scopeTab === 'my' ? [{ id: 'draft', label: 'Taslaklar' }] : []),
+            ...(scopeTab === 'my' ? [{ id: 'submitted', label: 'Bölüm Onayında' }] : []),
+            ...(scopeTab === 'my' ? [{ id: 'dept_approved', label: 'Koordinatörde' }] : []),
+            { id: 'coordinator_approved', label: 'Onaylı / Takvimde' },
             { id: 'completed', label: 'Tamamlananlar' },
-            { id: 'revision_needed', label: 'Revizyonlu' },
+            ...(scopeTab === 'my' ? [{ id: 'revision_needed', label: 'Revizyonlu' }] : []),
           ].map(tab => (
             <button
               key={tab.id}
               onClick={() => setStatusFilter(tab.id)}
               className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
                 statusFilter === tab.id
-                  ? 'bg-slate-900 text-white font-semibold shadow-xs'
+                  ? 'bg-emerald-700 text-white font-semibold shadow-xs'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -206,7 +426,9 @@ export const ProjectList: React.FC<ProjectListProps> = ({
           <Sparkles className="w-10 h-10 text-slate-300 mx-auto mb-3" />
           <h3 className="text-sm font-bold text-slate-800">Henüz bu kriterde bir çalışma bulunmuyor</h3>
           <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            Arama filtrenizi temizleyebilir veya yeni bir sürdürülebilirlik projesi önerisinde bulunabilirsiniz.
+            {scopeTab === 'school' 
+              ? 'Okul vitrininde görüntülenecek onaylı bir çalışma bulunamadı. Filtrelerinizi temizleyebilirsiniz.' 
+              : 'Arama filtrenizi temizleyebilir veya yeni bir sürdürülebilirlik projesi önerisinde bulunabilirsiniz.'}
           </p>
         </div>
       ) : (
@@ -217,7 +439,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
             return (
               <div 
                 key={project.id}
-                className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-card-soft hover:shadow-md transition-all flex flex-col justify-between group"
+                className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-card-soft hover:shadow-md transition-all flex flex-col justify-between group overflow-hidden"
               >
                 <div>
                   {/* Kart Üst Bilgisi: Zümre & Durum */}
@@ -229,30 +451,88 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                       {dept?.code} • {dept?.name.split(' ')[0]}
                     </span>
 
-                    {getStatusBadge(project.status, project.rejectionFeedback)}
+                    <div className="flex items-center gap-1.5">
+                      {getStatusBadge(project.status, project.rejectionFeedback)}
+                    </div>
                   </div>
 
-                  {/* Başlık ve Açıklama */}
-                  <h3 className="text-sm font-bold text-slate-900 group-hover:text-emerald-800 transition-colors leading-snug">
-                    {project.title}
+                  {/* Başlık ve Açıklama (Tıklanabilir Başlık -> Detay Modalı) */}
+                  <h3 
+                    onClick={() => setDetailProject(project)}
+                    className="text-sm font-bold text-slate-900 group-hover:text-emerald-800 transition-colors leading-snug cursor-pointer flex items-start justify-between gap-2"
+                  >
+                    <span>{project.title}</span>
+                    <Eye className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </h3>
                   <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
                     {project.description}
                   </p>
+
+                  {/* Kulüp & Öğrenci Temsilcileri Bilgisi */}
+                  {(project.studentClub || (project.studentRepresentatives && project.studentRepresentatives.length > 0)) && (
+                    <div className="mt-2.5 p-2 rounded-xl bg-amber-50/60 border border-amber-200/60 flex flex-wrap items-center gap-2 text-[11px]">
+                      {project.studentClub && (
+                        <span className="font-semibold text-amber-900 flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-amber-600" />
+                          <span>{project.studentClub}</span>
+                        </span>
+                      )}
+                      {project.studentRepresentatives && project.studentRepresentatives.length > 0 && (
+                        <span className="text-slate-600 text-[10px]">
+                          Temsilciler: {project.studentRepresentatives.join(', ')}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Revizyon Uyarısı */}
                   {project.status === 'revision_needed' && project.rejectionFeedback && (
                     <div className="mt-3 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                       <div>
-                        <span className="font-bold">Bölüm Başkanı Notu: </span>
+                        <span className="font-bold">Revizyon Talebi: </span>
                         <span>{project.rejectionFeedback}</span>
                       </div>
                     </div>
                   )}
 
+                  {/* Hedef Kitle / Okul Düzeyleri */}
+                  {project.targetGrades && project.targetGrades.length > 0 && (() => {
+                    const parsed = parseTargetGrades(project.targetGrades);
+                    return (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                        {parsed.isAllSchool ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                            <School className="w-3 h-3 text-slate-500" />
+                            <span>Tüm Okul (Lise &amp; Fen)</span>
+                          </span>
+                        ) : (
+                          <>
+                            {parsed.liseGrades.length > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200/80">
+                                <GraduationCap className="w-3 h-3 text-indigo-600" />
+                                <span>Işık: {parsed.liseGrades.join(', ')}</span>
+                              </span>
+                            )}
+                            {parsed.fenGrades.length > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200/80">
+                                <Atom className="w-3 h-3 text-teal-600" />
+                                <span>Fen: {parsed.fenGrades.join(', ')}</span>
+                              </span>
+                            )}
+                            {parsed.others.map((other, idx) => (
+                              <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                <span>{other}</span>
+                              </span>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* SKA Etiketleri */}
-                  <div className="flex flex-wrap gap-1.5 mt-3.5">
+                  <div className="flex flex-wrap gap-1.5 mt-3">
                     {project.sdgGoals.map(sdgNum => {
                       const sdg = SDG_GOALS.find(g => g.number === sdgNum);
                       return (
@@ -270,31 +550,67 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                   </div>
                 </div>
 
-                {/* Alt Kısım: Danışman, Tarih ve Aksiyon Butonu */}
-                <div className="mt-5 pt-3.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-slate-500">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5 text-slate-700 font-medium">
-                      <User className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{project.advisorName}</span>
+                {/* Alt Kısım: Danışman, Tarih ve Aksiyon Butonları */}
+                <div className="mt-5 pt-3.5 border-t border-slate-100 space-y-3 text-xs text-slate-500">
+                  {/* Bilgiler: Danışman, Ortaklar, Tarih ve Mekan */}
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-slate-700 font-medium truncate min-w-0">
+                        <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="truncate">{project.advisorName}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px] text-slate-400 shrink-0">
+                        <Calendar className="w-3 h-3 text-slate-400" />
+                        <span>{project.startDate}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3 text-[11px] text-slate-400">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {project.startDate}
-                      </span>
-                      <span className="flex items-center gap-1 truncate max-w-[150px]">
-                        <MapPin className="w-3 h-3" />
-                        {project.location}
-                      </span>
-                    </div>
+
+                    {project.collaboratingTeachers && project.collaboratingTeachers.length > 0 && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-teal-700 font-medium min-w-0">
+                        <Users className="w-3 h-3 text-teal-600 shrink-0" />
+                        <span className="truncate" title={project.collaboratingTeachers.join(', ')}>
+                          Ortak: {project.collaboratingTeachers.join(', ')}
+                        </span>
+                      </div>
+                    )}
+
+                    {project.location && (
+                      <div className="flex items-center gap-1 text-[11px] text-slate-400 min-w-0">
+                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="truncate" title={project.location}>{project.location}</span>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Aksiyon Butonu */}
-                  <div className="shrink-0">
-                    {project.status === 'coordinator_approved' && (
+                  {/* Aksiyon Butonları */}
+                  <div className="flex items-center justify-end flex-wrap gap-2 pt-2 border-t border-slate-100/60">
+                    <button
+                      onClick={() => setDetailProject(project)}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                      title="Proje detaylarını ve medya galerisini incele"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-slate-500" />
+                      <span>İncele</span>
+                    </button>
+
+                    {canEditProject(project) && (
+                      <button
+                        onClick={() => onEditProject(project)}
+                        className={`px-3 py-1.5 rounded-xl font-semibold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer ${
+                          project.status === 'draft'
+                            ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                            : 'bg-rose-600 hover:bg-rose-700 text-white'
+                        }`}
+                      >
+                        <FileEdit className="w-3.5 h-3.5" />
+                        <span>{project.status === 'draft' ? 'Taslağı Düzenle' : 'Revizyonu Düzenle'}</span>
+                      </button>
+                    )}
+
+                    {canReportProject(project) && (
                       <button
                         onClick={() => onOpenReportModal(project)}
-                        className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs"
+                        className="px-3 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                       >
                         <FileCheck2 className="w-3.5 h-3.5" />
                         <span>Sonuç Raporu Gir</span>
@@ -304,10 +620,10 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                     {project.status === 'completed' && project.impactReport && (
                       <button
                         onClick={() => onOpenReportModal(project)}
-                        className="w-full sm:w-auto px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs transition-colors flex items-center justify-center gap-1.5"
+                        className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer"
                       >
-                        <Award className="w-3.5 h-3.5 text-teal-600" />
-                        <span>Raporu Gör ({project.impactReport.actualParticipants} Katılımcı)</span>
+                        <Award className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Raporu Güncelle</span>
                       </button>
                     )}
                   </div>
@@ -316,6 +632,18 @@ export const ProjectList: React.FC<ProjectListProps> = ({
             );
           })}
         </div>
+      )}
+
+      {/* Proje Detay & Zengin Medya Galerisi Modalı */}
+      {detailProject && (
+        <ProjectDetailModal 
+          project={detailProject}
+          isOpen={!!detailProject}
+          onClose={() => setDetailProject(null)}
+          onOpenReportModal={onOpenReportModal}
+          canEditReport={canReportProject(detailProject) || (detailProject.status === 'completed' && (currentUser.role === 'coordinator' || currentUser.role === 'admin' || detailProject.advisorId === currentUser.id))}
+          onEditProject={onEditProject}
+        />
       )}
     </div>
   );

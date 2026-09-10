@@ -7,17 +7,17 @@ import {
   CampusMetric, 
   ProjectStatus, 
   ImpactReport,
-  Department 
+  Department,
+  AcademicYear 
 } from './types';
+import { DEPARTMENTS } from './constants';
 import { 
-  MOCK_USERS, 
-  INITIAL_PROJECTS, 
-  INITIAL_CURRICULUM, 
-  INITIAL_CAMPUS_METRICS,
-  DEPARTMENTS 
-} from './data/mockData';
+  DEFAULT_SIMULATION_USERS as MOCK_USERS, 
+  INITIAL_PROFILES
+} from './data/initialData';
+import { exportDatabaseBackupJson } from './lib/exportUtils';
 import { dbService } from './lib/dbService';
-import { isSupabaseConfigured } from './lib/supabase';
+import { isFirebaseConfigured, auth } from './lib/firebase';
 import { Header } from './components/Layout/Header';
 import { Sidebar } from './components/Layout/Sidebar';
 import { MetricCards } from './components/Dashboard/MetricCards';
@@ -30,42 +30,81 @@ import { ApprovalDesk } from './components/Approvals/ApprovalDesk';
 import { CurriculumTracker } from './components/Curriculum/CurriculumTracker';
 import { CampusMetricsView } from './components/CampusMetrics/CampusMetricsView';
 import { AnnualReportView } from './components/Reports/AnnualReportView';
-import { Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
+import { UserManagementView } from './components/Admin/UserManagementView';
+import { LoginModal } from './components/Auth/LoginModal';
+import { PersonalDashboard } from './components/Dashboard/PersonalDashboard';
+import { SchoolCalendarView } from './components/Calendar/SchoolCalendarView';
+import { Sparkles, CheckCircle2, ArrowRight, GraduationCap } from 'lucide-react';
 
 export function App() {
-  // Aktif kullanıcı rolü (Varsayılan: Sürdürülebilirlik Koordinatörü)
-  const [currentRole, setCurrentRole] = useState<UserRole>('coordinator');
-  const [activeDeptHeadDeptId, setActiveDeptHeadDeptId] = useState<string>(DEPARTMENTS[0].id);
+  // Kayıtlı profiller
+  const [profiles, setProfiles] = useState<UserProfile[]>(INITIAL_PROFILES);
+
+  // Giriş yapmış kullanıcı (Oturum)
+  const [authUser, setAuthUser] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem('ecocampus_auth_user');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  // Aktif rol ve zümre
+  const [currentRole, setCurrentRole] = useState<UserRole>(authUser?.role || 'coordinator');
+  const [activeDeptHeadDeptId, setActiveDeptHeadDeptId] = useState<string>(
+    authUser?.departmentId || DEPARTMENTS[0].id
+  );
+  const [activeTeacherId, setActiveTeacherId] = useState<string>(() => {
+    const firstTeacher = INITIAL_PROFILES.find(p => p.role === 'teacher');
+    return firstTeacher ? firstTeacher.id : 'user-teacher-isik';
+  });
 
   // Aktif kullanıcı profilini hesapla
   const currentUser: UserProfile = React.useMemo(() => {
-    if (currentRole === 'dept_head') {
-      const targetDept = DEPARTMENTS.find(d => d.id === activeDeptHeadDeptId) || DEPARTMENTS[0];
-      return {
-        id: `user-head-${targetDept.code.toLowerCase()}`,
-        name: targetDept.headName,
-        email: `${targetDept.headName.toLowerCase().replace(/[^a-z]/g, '')}@erenkoyisik.k12.tr`,
-        role: 'dept_head',
-        departmentId: targetDept.id,
-        title: `${targetDept.name} Bölüm Başkanı`,
-        avatar: '/logo.png',
-      };
+    if (!authUser) return INITIAL_PROFILES[0];
+
+    // Koordinatör veya Admin ise önizleme için rol değiştirebilir
+    if (authUser.role === 'coordinator' || authUser.role === 'admin') {
+      if (currentRole === 'dept_head') {
+        const targetDept = DEPARTMENTS.find(d => d.id === activeDeptHeadDeptId) || DEPARTMENTS[0];
+        const match = profiles.find(p => p.departmentId === targetDept.id && p.role === 'dept_head');
+        return match || {
+          id: `user-head-${targetDept.code.toLowerCase()}`,
+          name: targetDept.headName,
+          email: `${targetDept.headName.toLowerCase().replace(/[^a-z]/g, '')}@fmvisik.k12.tr`,
+          role: 'dept_head',
+          departmentId: targetDept.id,
+          title: `${targetDept.name} Bölüm Başkanı`,
+          avatar: '/logo.png',
+        };
+      }
+      if (currentRole === 'teacher') {
+        const match = profiles.find(p => p.id === activeTeacherId) || profiles.find(p => p.role === 'teacher');
+        return match || MOCK_USERS.teacher;
+      }
+      return authUser;
     }
-    return MOCK_USERS[currentRole];
-  }, [currentRole, activeDeptHeadDeptId]);
+
+    return authUser;
+  }, [authUser, currentRole, activeDeptHeadDeptId, activeTeacherId, profiles]);
 
   // Aktif sekme
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
 
-  // Veri Durumları
-  const [projects, setProjects] = useState<ProjectEvent[]>(INITIAL_PROJECTS);
-  const [curriculums, setCurriculums] = useState<CurriculumIntegration[]>(INITIAL_CURRICULUM);
-  const [metrics, setMetrics] = useState<CampusMetric[]>(INITIAL_CAMPUS_METRICS);
+  // Veri Durumları (Kalıcı Yerel Depolama + Bulut Eşitleme)
+  const [projects, setProjects] = useState<ProjectEvent[]>(() => dbService.getLocalProjects());
+  const [curriculums, setCurriculums] = useState<CurriculumIntegration[]>(() => dbService.getLocalCurriculums());
+  const [metrics, setMetrics] = useState<CampusMetric[]>(() => dbService.getLocalCampusMetrics());
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+  const [activeAcademicYear, setActiveAcademicYear] = useState<AcademicYear | undefined>(undefined);
   const [isSyncing, setIsSyncing] = useState(false);
 
   // Filtreler & Modallar
   const [selectedSdgFilter, setSelectedSdgFilter] = useState<number | null>(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<ProjectEvent | null>(null);
   const [isImpactModalOpen, setIsImpactModalOpen] = useState(false);
   const [selectedProjectForReport, setSelectedProjectForReport] = useState<ProjectEvent | null>(null);
 
@@ -79,13 +118,130 @@ export function App() {
     }, 4000);
   };
 
-  // 1. Supabase'den Canlı Verileri Çek
-  useEffect(() => {
-    const loadData = async () => {
-      if (isSupabaseConfigured) {
+  // Oturum Yönetimi
+  const handleLogin = (user: UserProfile) => {
+    setAuthUser(user);
+    setCurrentRole(user.role);
+    if (user.departmentId) setActiveDeptHeadDeptId(user.departmentId);
+    try {
+      localStorage.setItem('ecocampus_auth_user', JSON.stringify(user));
+    } catch {
+      // ignore
+    }
+    showToast(`Hoş geldiniz, ${user.name} (${user.title || user.email})`);
+  };
+
+  const handleLogout = () => {
+    setAuthUser(null);
+    try {
+      localStorage.removeItem('ecocampus_auth_user');
+    } catch {
+      // ignore
+    }
+    showToast('Oturum kapatıldı.');
+  };
+
+  // Kullanıcı & Profil Yönetimi
+  const handleAddProfile = async (profileData: Omit<UserProfile, 'id'>) => {
+    const created = await dbService.createProfile(profileData);
+    setProfiles(prev => [created, ...prev]);
+    showToast(`${created.name} (@fmvisik.k12.tr) sisteme başarıyla tanımlandı.`);
+  };
+
+  const handleUpdateProfile = async (id: string, updates: Partial<UserProfile>) => {
+    const success = await dbService.updateProfile(id, updates);
+    if (success) {
+      setProfiles(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+      if (authUser && authUser.id === id) {
+        const updated = { ...authUser, ...updates };
+        setAuthUser(updated);
         try {
+          localStorage.setItem('ecocampus_auth_user', JSON.stringify(updated));
+        } catch {
+          // ignore
+        }
+      }
+      showToast('Kullanıcı bilgileri ve yetkileri güncellendi.');
+    }
+  };
+
+  const handleDeleteProfile = async (id: string) => {
+    const success = await dbService.deleteProfile(id);
+    if (success) {
+      setProfiles(prev => prev.filter(p => p.id !== id));
+      showToast('Kullanıcı sistemden kaldırıldı.');
+    }
+  };
+
+  // Eğitim-Öğretim Yılı Yönetimi Handlers
+  const handleSaveAcademicYear = async (year: AcademicYear) => {
+    const updated = await dbService.saveAcademicYear(year);
+    setAcademicYears(updated);
+    const active = updated.find(y => y.isActive) || updated[0];
+    setActiveAcademicYear(active);
+    showToast(`Eğitim-Öğretim Yılı Güncellendi: ${year.name}`);
+  };
+
+  const handleSetActiveAcademicYear = async (yearId: string) => {
+    const updated = await dbService.setActiveAcademicYear(yearId);
+    setAcademicYears(updated);
+    const active = updated.find(y => y.id === yearId);
+    if (active) {
+      setActiveAcademicYear(active);
+      showToast(`Aktif Eğitim-Öğretim Yılı: ${active.name}`);
+    }
+  };
+
+  // 1. Canlı ve Yerel Verileri Senkronize Et
+  useEffect(() => {
+    let unsubscribeAuth: (() => void) | undefined;
+
+    const loadData = async () => {
+      // Profilleri çek
+      try {
+        const liveProfiles = await dbService.getProfiles();
+        if (liveProfiles && liveProfiles.length > 0) {
+          setProfiles(liveProfiles);
+          if (authUser) {
+            const fresh = liveProfiles.find(p => p.email.toLowerCase() === authUser.email.toLowerCase());
+            if (fresh) setAuthUser(fresh);
+          }
+        }
+      } catch (err) {
+        console.warn('Profiller yüklenemedi:', err);
+      }
+
+      // Eğitim-Öğretim Yıllarını Çek
+      try {
+        const liveYears = await dbService.getAcademicYears();
+        if (liveYears && liveYears.length > 0) {
+          setAcademicYears(liveYears);
+          const activeYear = liveYears.find(y => y.isActive) || liveYears[0];
+          setActiveAcademicYear(activeYear);
+        }
+      } catch (err) {
+        console.warn('Eğitim yılları yüklenemedi:', err);
+      }
+
+      if (isFirebaseConfigured && auth) {
+        try {
+          // Firebase Google Auth Oturum Dinleyicisi
+          unsubscribeAuth = auth.onAuthStateChanged(async (firebaseUser) => {
+            if (firebaseUser?.email) {
+              const email = firebaseUser.email.toLowerCase();
+              const liveProfiles = await dbService.getProfiles();
+              const matched = liveProfiles.find(p => p.email.toLowerCase() === email);
+              if (matched) {
+                handleLogin(matched);
+              } else {
+                showToast('Yetkisiz Erişim: Bu Google hesabı için atanmış bir rol bulunamadı.');
+                await dbService.logOut();
+              }
+            }
+          });
+
           const { data: liveProjects, fromLive } = await dbService.getProjects();
-          if (fromLive) {
+          if (liveProjects && liveProjects.length > 0) {
             setProjects(liveProjects);
           }
 
@@ -95,12 +251,12 @@ export function App() {
           }
 
           const liveMet = await dbService.getCampusMetrics();
-          if (liveMet && liveMet.length > 0) {
+          if (liveMet !== undefined && liveMet !== null) {
             setMetrics(liveMet);
           }
 
           if (fromLive) {
-            showToast('FMV Erenköy Işık veritabanına bağlanıldı.');
+            showToast('FMV Erenköy Işık veritabanı senkronize edildi.');
           }
         } catch (e) {
           console.error('Veri yükleme hatası:', e);
@@ -109,6 +265,12 @@ export function App() {
     };
 
     loadData();
+
+    return () => {
+      if (unsubscribeAuth) {
+        unsubscribeAuth();
+      }
+    };
   }, []);
 
   // Onay Bekleyen Sayısı
@@ -119,7 +281,7 @@ export function App() {
     return p.status === 'dept_approved' || p.status === 'submitted';
   }).length;
 
-  // 2. Yeni Proje Ekleme (Supabase'e Yazar)
+  // 2. Yeni Proje Ekleme (Yerel Depolama ve Bulut Senkronu)
   const handleAddProject = async (newProjectData: Omit<ProjectEvent, 'id' | 'createdAt'>) => {
     const tempId = `proj-${Date.now()}`;
     const newProject: ProjectEvent = {
@@ -131,10 +293,66 @@ export function App() {
     setProjects(prev => [newProject, ...prev]);
     showToast(`"${newProject.title}" oluşturuldu ve ${currentUser.title}'na onaya sevk edildi.`);
 
-    const realId = await dbService.createProject(newProjectData);
-    if (realId !== tempId) {
-      setProjects(prev => prev.map(p => p.id === tempId ? { ...p, id: realId } : p));
+    await dbService.createProject({
+      ...newProjectData,
+      id: tempId
+    } as any);
+  };
+
+  // 2.1 Proje Düzenleme / Taslaktan Devam Etme
+  const handleOpenEditProject = (project: ProjectEvent) => {
+    if (currentUser.role === 'teacher') {
+      const isOwner = project.advisorId === currentUser.id || 
+        project.advisorName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+        project.collaboratingTeachers?.some(t => t.toLowerCase().includes(currentUser.name.toLowerCase()));
+      if (!isOwner) {
+        showToast('Yalnızca kendi danışmanı veya ortağı olduğunuz projeleri düzenleyebilirsiniz.');
+        return;
+      }
+    } else if (currentUser.role === 'dept_head') {
+      if (project.departmentId !== currentUser.departmentId) {
+        showToast('Yalnızca kendi zümrenize ait projeleri düzenleyebilirsiniz.');
+        return;
+      }
     }
+    setEditingProject(project);
+    setIsProjectModalOpen(true);
+  };
+
+  const handleOpenNewProject = () => {
+    setEditingProject(null);
+    setIsProjectModalOpen(true);
+  };
+
+  const handleUpdateProject = async (
+    projectId: string, 
+    updates: Partial<ProjectEvent>
+  ) => {
+    const target = projects.find(p => p.id === projectId);
+    if (target) {
+      if (currentUser.role === 'teacher') {
+        const isOwner = target.advisorId === currentUser.id || 
+          target.advisorName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+          target.collaboratingTeachers?.some(t => t.toLowerCase().includes(currentUser.name.toLowerCase()));
+        if (!isOwner) {
+          showToast('Yetkisiz işlem: Sadece kendi danışmanı veya ortağı olduğunuz projeyi güncelleyebilirsiniz.');
+          return;
+        }
+      } else if (currentUser.role === 'dept_head') {
+        if (target.departmentId !== currentUser.departmentId) {
+          showToast('Yetkisiz işlem: Sadece kendi zümrenizdeki projeleri güncelleyebilirsiniz.');
+          return;
+        }
+      }
+    }
+
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
+    if (updates.status === 'submitted') {
+      showToast('Proje başvurusu güncellendi ve bölüm başkanına onaya gönderildi.');
+    } else {
+      showToast('Proje taslağı başarıyla güncellendi.');
+    }
+    await dbService.updateProject(projectId, updates);
   };
 
   // 3. Durum Güncelleme (Onay / Revizyon)
@@ -143,13 +361,29 @@ export function App() {
     newStatus: ProjectStatus, 
     feedback?: string
   ) => {
+    const target = projects.find(p => p.id === projectId);
+    if (target) {
+      if (currentUser.role === 'teacher') {
+        showToast('Öğretmen rolünün onaylama veya durum değiştirme yetkisi bulunmamaktadır.');
+        return;
+      }
+      if (currentUser.role === 'dept_head' && target.departmentId !== currentUser.departmentId) {
+        showToast('Yetkisiz işlem: Yalnızca kendi zümrenizdeki öğretmenlerin projelerini onaylayabilirsiniz.');
+        return;
+      }
+    }
+
     setProjects(prev => prev.map(p => {
       if (p.id === projectId) {
-        return {
+        const item: ProjectEvent = {
           ...p,
           status: newStatus,
           rejectionFeedback: feedback,
         };
+        if (newStatus === 'coordinator_approved' || newStatus === 'dept_approved') {
+          delete item.rejectionFeedback;
+        }
+        return item;
       }
       return p;
     }));
@@ -170,6 +404,24 @@ export function App() {
     projectId: string, 
     reportData: Omit<ImpactReport, 'id' | 'completedAt'>
   ) => {
+    const target = projects.find(p => p.id === projectId);
+    if (target) {
+      if (currentUser.role === 'teacher') {
+        const isOwner = target.advisorId === currentUser.id || 
+          target.advisorName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+          target.collaboratingTeachers?.some(t => t.toLowerCase().includes(currentUser.name.toLowerCase()));
+        if (!isOwner) {
+          showToast('Yetkisiz işlem: Yalnızca kendi projenizin veya ortağı olduğunuz projenin sonuç raporunu kaydedebilirsiniz.');
+          return;
+        }
+      } else if (currentUser.role === 'dept_head') {
+        if (target.departmentId !== currentUser.departmentId) {
+          showToast('Yetkisiz işlem: Yalnızca kendi zümrenizdeki projelerin sonuç raporunu kaydedebilirsiniz.');
+          return;
+        }
+      }
+    }
+
     const fullReport: ImpactReport = {
       ...reportData,
       id: `rep-${Date.now()}`,
@@ -202,21 +454,115 @@ export function App() {
     showToast(`"${newEntry.courseName}" dersi sürdürülebilirlik matrisine eklendi.`);
   };
 
+  // 5.1 Müfredat Güncelleme
+  const handleUpdateCurriculum = async (
+    curriculumId: string, 
+    updates: Partial<CurriculumIntegration>
+  ) => {
+    const target = curriculums.find(c => c.id === curriculumId);
+    if (target) {
+      if (currentUser.role === 'teacher') {
+        const isOwner = target.teacherName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+          target.departmentId === currentUser.departmentId;
+        if (!isOwner) {
+          showToast('Yetkisiz işlem: Yalnızca kendi dersinizi veya zümrenizdeki kazanımı güncelleyebilirsiniz.');
+          return;
+        }
+      } else if (currentUser.role === 'dept_head') {
+        if (target.departmentId !== currentUser.departmentId) {
+          showToast('Yetkisiz işlem: Yalnızca kendi zümrenizdeki kazanımları güncelleyebilirsiniz.');
+          return;
+        }
+      }
+    }
+
+    setCurriculums(prev => prev.map(c => c.id === curriculumId ? { ...c, ...updates } : c));
+    await dbService.updateCurriculum(curriculumId, updates);
+    showToast('Ders kazanım eşleştirmesi güncellendi.');
+  };
+
+  // 5.2 Müfredat Silme
+  const handleDeleteCurriculum = async (curriculumId: string) => {
+    const target = curriculums.find(c => c.id === curriculumId);
+    if (target) {
+      if (currentUser.role === 'teacher') {
+        const isOwner = target.teacherName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+          target.departmentId === currentUser.departmentId;
+        if (!isOwner) {
+          showToast('Yetkisiz işlem: Yalnızca kendi dersinizi veya zümrenizdeki kazanımı silebilirsiniz.');
+          return;
+        }
+      } else if (currentUser.role === 'dept_head') {
+        if (target.departmentId !== currentUser.departmentId) {
+          showToast('Yetkisiz işlem: Yalnızca kendi zümrenizdeki kazanımları silebilirsiniz.');
+          return;
+        }
+      }
+    }
+
+    setCurriculums(prev => prev.filter(c => c.id !== curriculumId));
+    await dbService.deleteCurriculum(curriculumId);
+    showToast('Ders kazanım eşleştirmesi silindi.');
+  };
+
   // 6. Yeni Kampüs Metriği Ekleme
   const handleAddCampusMetric = async (newMetricData: Omit<CampusMetric, 'id'>) => {
+    const newId = `met-${Date.now()}`;
     const newEntry: CampusMetric = {
       ...newMetricData,
-      id: `met-${Date.now()}`,
+      id: newId,
+      notes: newMetricData.notes || '',
+      createdByName: currentUser.name,
+      createdByEmail: currentUser.email,
+      createdAt: new Date().toISOString(),
     };
-    setMetrics(prev => [...prev, newEntry]);
-    await dbService.createCampusMetric(newMetricData);
+    setMetrics(prev => {
+      const idx = prev.findIndex(m => m.period === newEntry.period);
+      if (idx !== -1) {
+        const updated = [...prev];
+        updated[idx] = newEntry;
+        return updated;
+      }
+      return [...prev, newEntry];
+    });
+    await dbService.createCampusMetric(newEntry, newId);
     showToast(`${newEntry.period} dönemi tüketim verileri işlendi.`);
   };
 
-  // 7. Supabase'e Veri Eşitleme
+  // 6b. Kampüs Metriği Güncelleme
+  const handleUpdateCampusMetric = async (updatedMetric: CampusMetric) => {
+    const metricWithAudit: CampusMetric = {
+      ...updatedMetric,
+      notes: updatedMetric.notes || '',
+      updatedByName: currentUser.name,
+      updatedByEmail: currentUser.email,
+      updatedAt: new Date().toISOString(),
+    };
+    setMetrics(prev => prev.map(m => (m.id === metricWithAudit.id || m.period === metricWithAudit.period) ? metricWithAudit : m));
+    await dbService.updateCampusMetric(metricWithAudit);
+    showToast(`${metricWithAudit.period} dönemi tüketim verileri güncellendi.`);
+  };
+
+  // 6c. Kampüs Metriği Silme
+  const handleDeleteCampusMetric = async (metricId: string) => {
+    setMetrics(prev => prev.filter(m => m.id !== metricId));
+    await dbService.deleteCampusMetric(metricId);
+    showToast('Dönem tüketim verisi silindi.');
+  };
+
+  // 6c. Kampüs Metriklerini Temizleme
+  const handleClearCampusMetrics = async () => {
+    setMetrics([]);
+    await dbService.clearCampusMetrics();
+    showToast('Tüm kampüs tüketim ve atık verileri temizlendi.');
+  };
+
+
+
+  // 7. Firebase'e Veri Eşitleme
   const handleSyncSeedData = async () => {
     setIsSyncing(true);
-    showToast('FMV Erenköy Işık zümreleri ve projeleri Supabase tablolarına aktarılıyor...');
+    showToast('FMV Erenköy Işık zümreleri ve projeleri Cloud Firestore veritabanına aktarılıyor...');
     
     const result = await dbService.seedInitialData();
     setIsSyncing(false);
@@ -232,21 +578,56 @@ export function App() {
     setMetrics(refreshedMet);
   };
 
+  // 8. Firebase'deki Deneme Verilerini Temizle (Yalnızca Profiller Korunur)
+  const handleClearTestData = async () => {
+    setIsSyncing(true);
+    showToast('Deneme projeleri, müfredat ve kampüs metrikleri temizleniyor...');
+    
+    const result = await dbService.clearTestData();
+    setIsSyncing(false);
+    showToast(result.message);
+
+    if (result.success) {
+      setProjects([]);
+      setCurriculums([]);
+      setMetrics([]);
+    }
+  };
+
   const handleOpenReportModal = (project: ProjectEvent) => {
+    if (currentUser.role === 'teacher') {
+      const isOwner = project.advisorId === currentUser.id || 
+        project.advisorName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+        project.collaboratingTeachers?.some(t => t.toLowerCase().includes(currentUser.name.toLowerCase()));
+      if (!isOwner && project.status !== 'completed') {
+        showToast('Yalnızca danışmanı veya ortağı olduğunuz projelerin sonuç raporunu girebilirsiniz.');
+        return;
+      }
+    } else if (currentUser.role === 'dept_head') {
+      if (project.departmentId !== currentUser.departmentId && project.status !== 'completed') {
+        showToast('Yalnızca kendi zümrenizdeki projelerin sonuç raporunu girebilirsiniz.');
+        return;
+      }
+    }
     setSelectedProjectForReport(project);
     setIsImpactModalOpen(true);
   };
 
   const handleSdgSelect = (sdgNum: number | null) => {
     setSelectedSdgFilter(sdgNum);
-    if (sdgNum !== null) {
-      setCurrentTab('projects');
-    }
   };
 
   const handleDeptHeadSelect = (dept: Department) => {
     setActiveDeptHeadDeptId(dept.id);
     showToast(`Aktif Bölüm Başkanı: ${dept.headName} (${dept.name})`);
+  };
+
+  const handleTeacherSelect = (teacherId: string) => {
+    setActiveTeacherId(teacherId);
+    const found = profiles.find(p => p.id === teacherId);
+    if (found) {
+      showToast(`Aktif Danışman Öğretmen: ${found.name} (${found.title || ''})`);
+    }
   };
 
   return (
@@ -261,19 +642,60 @@ export function App() {
         </div>
       )}
 
+      {/* Kurumsal Giriş Modalı */}
+      {!authUser && (
+        <LoginModal 
+          onLogin={handleLogin}
+          profiles={profiles}
+        />
+      )}
+
       {/* Üst Bar */}
       <Header 
         currentUser={currentUser}
+        authUser={authUser}
+        profiles={profiles}
+        activeTeacherId={activeTeacherId}
         onRoleChange={(role) => {
           setCurrentRole(role);
-          if (role !== 'dept_head') {
-            showToast(`Rol değiştirildi: ${MOCK_USERS[role].title}`);
+          if (role !== 'dept_head' && role !== 'teacher') {
+            showToast(`Rol değiştirildi: ${MOCK_USERS[role]?.title || role}`);
+          } else if (role === 'teacher') {
+            const currentT = profiles.find(p => p.id === activeTeacherId) || profiles.find(p => p.role === 'teacher');
+            if (currentT) showToast(`Danışman Öğretmen: ${currentT.name}`);
+          } else if (role === 'dept_head') {
+            const currentD = DEPARTMENTS.find(d => d.id === activeDeptHeadDeptId);
+            if (currentD) showToast(`Bölüm Başkanı: ${currentD.headName} (${currentD.name})`);
           }
         }}
         onDepartmentHeadChange={handleDeptHeadSelect}
+        onTeacherChange={handleTeacherSelect}
         pendingCount={pendingCount}
         onSyncSeedData={handleSyncSeedData}
+        onClearTestData={handleClearTestData}
         isSyncing={isSyncing}
+        onLogout={handleLogout}
+        onUpdateAvatar={async (newAvatar) => {
+          const targetId = authUser?.id || currentUser.id;
+          if (targetId) {
+            await handleUpdateProfile(targetId, { avatar: newAvatar });
+            showToast('Profil fotoğrafınız başarıyla güncellendi.');
+          }
+        }}
+        activeAcademicYear={activeAcademicYear}
+        academicYears={academicYears}
+        onSaveAcademicYear={handleSaveAcademicYear}
+        onSetActiveAcademicYear={handleSetActiveAcademicYear}
+        onExportBackup={() => {
+          exportDatabaseBackupJson({
+            projects,
+            curriculums,
+            campusMetrics: metrics,
+            profiles,
+            academicYears,
+          });
+          showToast('Veritabanı JSON yedeği başarıyla indirildi.');
+        }}
       />
 
       {/* Ana Gövde */}
@@ -284,19 +706,43 @@ export function App() {
           onTabChange={setCurrentTab}
           pendingCount={pendingCount}
           userRole={currentRole}
+          currentUserEmail={authUser?.email}
         />
 
         {/* Ana İçerik Alanı */}
         <main className="flex-1 p-4 lg:p-8 space-y-6 min-w-0 overflow-x-hidden">
-          {/* SEKME 1: GENEL GÖSTERGE PANELİ */}
+          {/* SEKME 1: BİREYSEL VEYA GENEL GÖSTERGE PANELİ */}
           {currentTab === 'dashboard' && (
-            <div className="space-y-6">
+            currentUser.role === 'teacher' || currentUser.role === 'dept_head' ? (
+              <PersonalDashboard 
+                currentUser={currentUser}
+                projects={projects}
+                curriculums={curriculums}
+                metrics={metrics}
+                profiles={profiles}
+                onOpenNewProject={handleOpenNewProject}
+                onEditProject={handleOpenEditProject}
+                onOpenReportModal={handleOpenReportModal}
+                onUpdateProjectStatus={handleUpdateProjectStatus}
+                onNavigateTab={(tab) => setCurrentTab(tab)}
+                activeAcademicYear={activeAcademicYear}
+              />
+            ) : (
+              <div className="space-y-6">
               {/* Karşılama Başlığı */}
               <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-emerald-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden border border-blue-900/40">
                 <div className="relative z-10 max-w-2xl space-y-2">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-amber-300 text-xs font-semibold backdrop-blur-xs">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>FMV Erenköy Işık Lisesi ve Fen Lisesi • Sürdürülebilirlik Vizyonu</span>
+                  <div className="flex items-center flex-wrap gap-2">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-amber-300 text-xs font-semibold backdrop-blur-xs">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>FMV Erenköy Işık Lisesi ve Fen Lisesi • Sürdürülebilirlik Vizyonu</span>
+                    </div>
+                    {activeAcademicYear && (
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold backdrop-blur-xs">
+                        <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
+                        <span>{activeAcademicYear.name} ({activeAcademicYear.startDate.split('-').reverse().join('.')} – {activeAcademicYear.endDate.split('-').reverse().join('.')})</span>
+                      </div>
+                    )}
                   </div>
                   <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
                     Hoş Geldiniz, {currentUser.name}
@@ -323,11 +769,6 @@ export function App() {
                     </button>
                   </div>
                 </div>
-
-                {/* Arka Plan Dekorasyonu: Işık Meşalesi Silueti */}
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-15 w-64 h-64 pointer-events-none hidden md:block">
-                  <img src="/logo.png" alt="Işık Meşalesi" className="w-full h-full object-contain" />
-                </div>
               </div>
 
               {/* Temel Metrikler */}
@@ -335,6 +776,7 @@ export function App() {
                 projects={projects}
                 curriculums={curriculums}
                 metrics={metrics}
+                activeAcademicYear={activeAcademicYear}
               />
 
               {/* 17 BM SKA Isı Haritası */}
@@ -352,17 +794,30 @@ export function App() {
                 onSelectDepartment={() => setCurrentTab('projects')}
               />
             </div>
+            )
           )}
 
-          {/* SEKME 2: PROJE VE ETKİNLİK HAVUZU */}
+          {/* SEKME 2: OKUL TAKVİMİ (RESMİ ONAYLI ETKİNLİKLER) */}
+          {currentTab === 'calendar' && (
+            <SchoolCalendarView 
+              projects={projects}
+              currentUser={currentUser}
+              onOpenReportModal={handleOpenReportModal}
+              activeAcademicYear={activeAcademicYear}
+            />
+          )}
+
+          {/* SEKME 3: PROJE & ETKİNLİK HAVUZU */}
           {currentTab === 'projects' && (
             <ProjectList 
               projects={projects}
               currentUser={currentUser}
-              onOpenNewModal={() => setIsProjectModalOpen(true)}
+              onOpenNewModal={handleOpenNewProject}
+              onEditProject={handleOpenEditProject}
               onOpenReportModal={handleOpenReportModal}
               selectedSdgFilter={selectedSdgFilter}
               onClearSdgFilter={() => setSelectedSdgFilter(null)}
+              onNavigateTab={setCurrentTab}
             />
           )}
 
@@ -380,7 +835,10 @@ export function App() {
             <CurriculumTracker 
               curriculums={curriculums}
               onAddCurriculum={handleAddCurriculum}
+              onUpdateCurriculum={handleUpdateCurriculum}
+              onDeleteCurriculum={handleDeleteCurriculum}
               currentUser={currentUser}
+              activeAcademicYear={activeAcademicYear}
             />
           )}
 
@@ -389,16 +847,31 @@ export function App() {
             <CampusMetricsView 
               metrics={metrics}
               onAddMetric={handleAddCampusMetric}
+              onUpdateMetric={handleUpdateCampusMetric}
+              onDeleteMetric={handleDeleteCampusMetric}
+              onClearMetrics={handleClearCampusMetrics}
               currentUser={currentUser}
             />
           )}
 
-          {/* SEKME 6: ECO-SCHOOLS & YILLIK RAPOR */}
+          {/* SEKME 6: SÜRDÜRÜLEBİLİRLİK & AKREDİTASYON RAPORU */}
           {currentTab === 'reports' && (
             <AnnualReportView 
               projects={projects}
               curriculums={curriculums}
               metrics={metrics}
+              activeAcademicYear={activeAcademicYear}
+            />
+          )}
+
+          {/* SEKME 7: KULLANICI & ROL YÖNETİMİ (YALNIZCA ERKAN SAĞNAK) */}
+          {currentTab === 'users' && authUser?.email?.toLowerCase() === 'erkan.sagnak@fmvisik.k12.tr' && (
+            <UserManagementView 
+              profiles={profiles}
+              onAddProfile={handleAddProfile}
+              onUpdateProfile={handleUpdateProfile}
+              onDeleteProfile={handleDeleteProfile}
+              currentUser={currentUser}
             />
           )}
         </main>
@@ -407,9 +880,15 @@ export function App() {
       {/* Proje Başvuru Modalı */}
       <ProjectFormModal 
         isOpen={isProjectModalOpen}
-        onClose={() => setIsProjectModalOpen(false)}
+        onClose={() => {
+          setIsProjectModalOpen(false);
+          setEditingProject(null);
+        }}
         onSubmit={handleAddProject}
+        onUpdate={handleUpdateProject}
+        initialProject={editingProject}
         currentUser={currentUser}
+        activeAcademicYear={activeAcademicYear}
       />
 
       {/* Etki / Kapanış Raporu Modalı */}

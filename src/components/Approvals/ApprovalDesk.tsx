@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ProjectEvent, UserProfile, ProjectStatus } from '../../types';
-import { DEPARTMENTS, SDG_GOALS } from '../../data/mockData';
+import { DEPARTMENTS, SDG_GOALS, parseTargetGrades } from '../../constants';
 import { 
   CheckSquare, 
   Check, 
@@ -13,9 +13,15 @@ import {
   MapPin, 
   Package, 
   Clock, 
-  ShieldCheck 
+  ShieldCheck,
+  GraduationCap,
+  Atom,
+  School,
+  Users,
+  Eye
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { ProjectDetailModal } from '../Projects/ProjectDetailModal';
 
 interface ApprovalDeskProps {
   projects: ProjectEvent[];
@@ -30,6 +36,7 @@ export const ApprovalDesk: React.FC<ApprovalDeskProps> = ({
 }) => {
   const [revisionModalOpen, setRevisionModalOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedDetailProject, setSelectedDetailProject] = useState<ProjectEvent | null>(null);
   const [revisionFeedback, setRevisionFeedback] = useState('');
 
   // Kullanıcı Bölüm Başkanı ise kendi zümresinin 'submitted' (inceleme bekleyen) projelerini görür.
@@ -177,6 +184,12 @@ export const ApprovalDesk: React.FC<ApprovalDeskProps> = ({
                       <User className="w-3.5 h-3.5 text-slate-400" />
                       Danışman: {project.advisorName}
                     </span>
+                    {project.collaboratingTeachers && project.collaboratingTeachers.length > 0 && (
+                      <span className="inline-flex items-center gap-1 font-medium text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-md border border-teal-200">
+                        <Users className="w-3.5 h-3.5 text-teal-600" />
+                        Ortak Öğretmenler: {project.collaboratingTeachers.join(', ')}
+                      </span>
+                    )}
                     <span className="flex items-center gap-1">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
                       {project.startDate} {project.endDate ? `— ${project.endDate}` : ''}
@@ -186,6 +199,42 @@ export const ApprovalDesk: React.FC<ApprovalDeskProps> = ({
                       {project.location}
                     </span>
                   </div>
+
+                  {/* Hedef Kitle / Katılımcı Seviyesi */}
+                  {project.targetGrades && project.targetGrades.length > 0 && (() => {
+                    const parsed = parseTargetGrades(project.targetGrades);
+                    return (
+                      <div className="flex flex-wrap items-center gap-2 text-xs pt-0.5">
+                        <span className="text-slate-400 font-medium">Hedef Kitle:</span>
+                        {parsed.isAllSchool ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
+                            <School className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Tüm Okul (Lise & Fen)</span>
+                          </span>
+                        ) : (
+                          <>
+                            {parsed.liseGrades.length > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                                <GraduationCap className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>Işık Lisesi: {parsed.liseGrades.join(', ')}</span>
+                              </span>
+                            )}
+                            {parsed.fenGrades.length > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200">
+                                <Atom className="w-3.5 h-3.5 text-teal-600" />
+                                <span>Fen Lisesi: {parsed.fenGrades.join(', ')}</span>
+                              </span>
+                            )}
+                            {parsed.others.map((other, idx) => (
+                              <span key={idx} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                <span>{other}</span>
+                              </span>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Kaynak İhtiyacı Varsa */}
                   {project.resourceNeeds && (
@@ -213,10 +262,19 @@ export const ApprovalDesk: React.FC<ApprovalDeskProps> = ({
                 </div>
 
                 {/* Onay & Revizyon Aksiyonları */}
-                <div className="flex items-center sm:self-end lg:self-center gap-2.5 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                <div className="flex items-center flex-wrap sm:self-end lg:self-center gap-2 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                  <button
+                    onClick={() => setSelectedDetailProject(project)}
+                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    title="Projenin tüm detaylarını, hedeflerini ve kaynak taleplerini incele"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-slate-500" />
+                    <span>İncele</span>
+                  </button>
+
                   <button
                     onClick={() => handleOpenRevision(project.id)}
-                    className="px-4 py-2.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors flex items-center gap-1.5"
+                    className="px-4 py-2.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
                   >
                     <MessageSquare className="w-3.5 h-3.5" />
                     <span>Revizyon İste</span>
@@ -224,7 +282,7 @@ export const ApprovalDesk: React.FC<ApprovalDeskProps> = ({
 
                   <button
                     onClick={() => handleApprove(project)}
-                    className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm hover:shadow transition-all flex items-center gap-1.5"
+                    className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Check className="w-4 h-4" />
                     <span>
@@ -289,6 +347,13 @@ export const ApprovalDesk: React.FC<ApprovalDeskProps> = ({
           </div>
         </div>
       )}
+
+      {/* Proje Detay Kartı Modalı */}
+      <ProjectDetailModal
+        project={selectedDetailProject}
+        isOpen={!!selectedDetailProject}
+        onClose={() => setSelectedDetailProject(null)}
+      />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-export type UserRole = 'teacher' | 'dept_head' | 'coordinator';
+export type UserRole = 'teacher' | 'dept_head' | 'coordinator' | 'admin';
 
 export type ProjectStatus = 
   | 'draft' 
@@ -21,9 +21,11 @@ export interface UserProfile {
   name: string;
   email: string;
   role: UserRole;
-  departmentId: string;
+  departmentId?: string;
   title: string;
   avatar?: string;
+  createdAt?: string;
+  status?: 'active' | 'pending';
 }
 
 export interface SdgGoal {
@@ -35,14 +37,34 @@ export interface SdgGoal {
   description: string;
 }
 
+export interface ImpactOutputItem {
+  id: string;
+  description: string;
+  value: number;
+  unit: string;
+}
+
+export interface ImpactMediaFile {
+  id: string;
+  name: string;
+  type: 'image' | 'video';
+  url: string;
+  size?: number;
+}
+
 export interface ImpactReport {
   id: string;
   projectId: string;
   actualParticipants: number;
+  studentParticipants?: number;
+  teacherParticipants?: number;
+  impactOutputs?: ImpactOutputItem[];
   impactMetricValue?: number;
   impactMetricUnit?: string;
   evaluationNotes?: string;
   photoUrls?: string[];
+  mediaFiles?: ImpactMediaFile[];
+  driveFolderUrl?: string;
   completedAt: string;
 }
 
@@ -53,6 +75,9 @@ export interface ProjectEvent {
   departmentId: string;
   advisorId: string;
   advisorName: string;
+  collaboratingTeachers?: string[];
+  studentClub?: string;
+  studentRepresentatives?: string[];
   eventType: 'Atölye' | 'Seminer / Konferans' | 'Saha Gezisi' | 'Farkındalık Kampanyası' | 'Yarışma' | 'Müfredat İçi Proje';
   sdgGoals: number[];
   targetGrades: string[];
@@ -92,4 +117,22 @@ export interface CampusMetric {
   compostOrganicKg: number;
   specialEwasteKg: number;
   notes?: string;
+  // Kayıt & Güncelleme Bilgisi (Audit Trail)
+  createdByName?: string;
+  createdByEmail?: string;
+  createdAt?: string;
+  updatedByName?: string;
+  updatedByEmail?: string;
+  updatedAt?: string;
 }
+
+export interface AcademicYear {
+  id: string; // Örn: "2026-2027"
+  name: string; // Örn: "2026-2027 Eğitim-Öğretim Yılı"
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  isActive: boolean;
+  totalStudents?: number; // Koordinatör tarafından girilen okul öğrenci mevcudu
+  description?: string;
+}
+

@@ -7,7 +7,8 @@ import {
   BarChart3, 
   FileBadge,
   Sparkles,
-  TreePine
+  Users,
+  FolderKanban
 } from 'lucide-react';
 import { UserRole } from '../../types';
 
@@ -16,6 +17,7 @@ interface SidebarProps {
   onTabChange: (tab: string) => void;
   pendingCount: number;
   userRole: UserRole;
+  currentUserEmail?: string;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -23,51 +25,78 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onTabChange,
   pendingCount,
   userRole,
+  currentUserEmail,
 }) => {
+  const isSuperAdmin = currentUserEmail?.toLowerCase() === 'erkan.sagnak@fmvisik.k12.tr';
+
+  const getDashboardLabel = () => {
+    if (userRole === 'teacher') return 'Bireysel Panelim';
+    if (userRole === 'dept_head') return 'Zümre Paneli';
+    return 'Genel Gösterge Paneli';
+  };
+
   const menuItems = [
     {
       id: 'dashboard',
-      label: 'Genel Gösterge Paneli',
+      label: getDashboardLabel(),
       icon: LayoutDashboard,
-      roles: ['teacher', 'dept_head', 'coordinator'],
+      roles: ['teacher', 'dept_head', 'coordinator', 'admin'],
+    },
+    {
+      id: 'calendar',
+      label: 'Okul Takvimi',
+      icon: CalendarDays,
+      roles: ['teacher', 'dept_head', 'coordinator', 'admin'],
     },
     {
       id: 'projects',
       label: 'Proje & Etkinlik Havuzu',
-      icon: CalendarDays,
-      roles: ['teacher', 'dept_head', 'coordinator'],
+      icon: FolderKanban,
+      roles: ['teacher', 'dept_head', 'coordinator', 'admin'],
     },
     {
       id: 'approvals',
       label: 'Onay Masası',
       icon: CheckSquare,
       badge: pendingCount,
-      roles: ['dept_head', 'coordinator'], // Teachers don't need approval queue
+      roles: ['dept_head', 'coordinator', 'admin'], // Teachers don't need approval queue
     },
     {
       id: 'curriculum',
       label: 'Müfredat & SKA Matrisi',
       icon: BookOpenCheck,
-      roles: ['teacher', 'dept_head', 'coordinator'],
+      roles: ['teacher', 'dept_head', 'coordinator', 'admin'],
     },
     {
       id: 'campus',
       label: 'Yeşil Kampüs Metrikleri',
       icon: BarChart3,
-      roles: ['teacher', 'dept_head', 'coordinator'],
+      roles: ['teacher', 'dept_head', 'coordinator', 'admin'],
     },
     {
       id: 'reports',
-      label: 'Eco-Schools & Yıllık Rapor',
+      label: 'Sürdürülebilirlik & Akreditasyon',
       icon: FileBadge,
-      roles: ['teacher', 'dept_head', 'coordinator'],
+      roles: ['teacher', 'dept_head', 'coordinator', 'admin'],
+    },
+    {
+      id: 'users',
+      label: 'Kullanıcı & Rol Yönetimi',
+      icon: Users,
+      roles: ['coordinator', 'admin'],
+      superAdminOnly: true,
     },
   ];
 
-  const filteredItems = menuItems.filter(item => item.roles.includes(userRole));
+  const filteredItems = menuItems.filter(item => {
+    if (item.id === 'users') {
+      return isSuperAdmin;
+    }
+    return item.roles.includes(userRole);
+  });
 
   return (
-    <aside className="w-full lg:w-64 bg-white border-r border-slate-200/80 flex flex-col justify-between p-4 shrink-0">
+    <aside className="no-print w-full lg:w-64 bg-white border-r border-slate-200/80 flex flex-col justify-between p-4 shrink-0">
       <div className="space-y-6">
         <div className="space-y-1">
           <p className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
@@ -117,17 +146,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {userRole === 'dept_head' && 'Zümrenizden gelen projeleri değerlendirin, revizyon isteyin veya koordinatör onayına sevk edin.'}
             {userRole === 'coordinator' && 'Okul genelindeki tüm sürdürülebilirlik faaliyetlerini, SKA dağılımını ve tüketim verilerini kontrol edin.'}
           </p>
-        </div>
-      </div>
-
-      {/* Alt Kısım: Çevre Mottosu */}
-      <div className="pt-4 border-t border-slate-100 flex items-center gap-3 text-slate-500">
-        <div className="w-8 h-8 rounded-lg bg-emerald-100/70 text-emerald-700 flex items-center justify-center shrink-0">
-          <TreePine className="w-4 h-4" />
-        </div>
-        <div className="text-[11px] leading-tight">
-          <p className="font-semibold text-slate-700">Gelecek İçin Sürdürülebilirlik</p>
-          <p className="text-slate-400">Hedef: 2026-2027 Yeşil Bayrak</p>
         </div>
       </div>
     </aside>

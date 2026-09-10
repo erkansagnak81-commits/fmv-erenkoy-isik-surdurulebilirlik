@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isSchoolStaff() {
+      return request.auth != null && 
+        (request.auth.token.email.matches('.*@fmvisik[.]k12[.]tr$') || 
+         request.auth.token.email.matches('.*@fmv[.]edu[.]tr$'));
+    }
+
+    // Okul panosu ve SDG projeleri herkes (ziyaretçiler, veliler, öğrenciler) tarafından görüntülenebilir.
+    // Veri ekleme, düzenleme ve silme işlemleri yalnızca @fmvisik.k12.tr kurumsal Google hesabı ile giriş yapmış personele açıktır.
+    match /{document=**} {
+      allow read: if true;
+      allow write: if isSchoolStaff();
+    }
+  }
+}

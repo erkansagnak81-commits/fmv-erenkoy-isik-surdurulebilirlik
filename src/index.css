@@ -38,11 +38,18 @@
   background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
 }
 
-/* Print styling for Annual Sürdürülebilirlik Raporu */
+/* Print styling for Sürdürülebilirlik Portalı */
 @media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm 10mm;
+  }
   body {
     background: white !important;
     color: black !important;
+    font-size: 10pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .no-print {
     display: none !important;
@@ -50,7 +57,15 @@
   .print-only {
     display: block !important;
   }
+  .print-table {
+    display: table !important;
+  }
   .print-break-inside-avoid {
-    break-inside: avoid;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  /* Force clean borders and typography on print */
+  .print-clean-border {
+    border-color: #cbd5e1 !important;
   }
 }
