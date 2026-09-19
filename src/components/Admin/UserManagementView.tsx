@@ -149,7 +149,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           role: formRole,
           departmentId: (formRole === 'coordinator' || formRole === 'admin') ? '' : formDeptId,
           title: formTitle.trim() || (formRole === 'dept_head' ? 'Bölüm Başkanı' : 'Danışman Öğretmen'),
-          avatar: formAvatar.trim() || undefined,
+          avatar: formAvatar.trim() || '',
         });
       } else {
         // E-posta mükerrer kontrolü
@@ -166,7 +166,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           role: formRole,
           departmentId: (formRole === 'coordinator' || formRole === 'admin') ? '' : formDeptId,
           title: formTitle.trim() || (formRole === 'dept_head' ? 'Bölüm Başkanı' : 'Danışman Öğretmen'),
-          avatar: formAvatar.trim() || undefined,
+          avatar: formAvatar.trim() || '',
           status: 'active',
         });
       }
@@ -574,9 +574,13 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                       <button
                         type="button"
                         onClick={() => setFormAvatar('/logo.png')}
-                        className="px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-900 transition cursor-pointer"
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 border rounded-xl text-xs font-semibold transition cursor-pointer ${
+                          formAvatar === '/logo.png'
+                            ? 'bg-amber-100 border-amber-400 text-amber-900 shadow-xs'
+                            : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                        }`}
                       >
-                        Işık Logosu
+                        <span>Işık Logosu</span>
                       </button>
                     </div>
                   </div>

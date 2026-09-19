@@ -620,7 +620,11 @@ export const dbService = {
         // İlk açılışta yerel profilleri Firestore'a tohumlayalım
         const locals = getLocalProfiles();
         for (const p of locals) {
-          await setDoc(doc(db, 'profiles', p.id), p);
+          const clean: any = {};
+          for (const [k, v] of Object.entries(p)) {
+            if (v !== undefined) clean[k] = v;
+          }
+          await setDoc(doc(db, 'profiles', p.id), clean, { merge: true });
         }
         return locals;
       }
@@ -630,8 +634,25 @@ export const dbService = {
         id: docSnap.id,
       }));
 
-      saveLocalProfiles(profiles);
-      return profiles;
+      // Yerelde olup henüz Firestore'a yansımamış kullanıcıları koru ve Firestore'a senkronize et
+      const locals = getLocalProfiles();
+      const profileMap = new Map<string, UserProfile>();
+      profiles.forEach(p => profileMap.set(p.id, p));
+
+      for (const localUser of locals) {
+        if (!profileMap.has(localUser.id)) {
+          profileMap.set(localUser.id, localUser);
+          const cleanLocal: any = {};
+          for (const [k, v] of Object.entries(localUser)) {
+            if (v !== undefined) cleanLocal[k] = v;
+          }
+          setDoc(doc(db, 'profiles', localUser.id), cleanLocal, { merge: true }).catch(() => {});
+        }
+      }
+
+      const merged = Array.from(profileMap.values());
+      saveLocalProfiles(merged);
+      return merged;
     } catch (e) {
       console.warn('Firebase getProfiles hatası, yerel listeye dönülüyor:', e);
       return getLocalProfiles();
@@ -650,6 +671,7 @@ export const dbService = {
       ...profileData,
       id: tempId,
       email: profileData.email.trim().toLowerCase(),
+      avatar: profileData.avatar || '',
       createdAt: new Date().toISOString(),
       status: 'active',
     };
@@ -659,7 +681,11 @@ export const dbService = {
 
     if (isFirebaseConfigured && db) {
       try {
-        await setDoc(doc(db, 'profiles', tempId), newProfile);
+        const firestoreData: any = {};
+        for (const [k, v] of Object.entries(newProfile)) {
+          if (v !== undefined) firestoreData[k] = v;
+        }
+        await setDoc(doc(db, 'profiles', tempId), firestoreData, { merge: true });
       } catch (e) {
         console.error('Firebase createProfile error:', e);
       }
@@ -670,12 +696,26 @@ export const dbService = {
 
   async updateProfile(id: string, updates: Partial<UserProfile>): Promise<boolean> {
     const locals = getLocalProfiles();
+    const existing = locals.find(p => p.id === id);
     const updatedLocals = locals.map(p => p.id === id ? { ...p, ...updates } : p);
     saveLocalProfiles(updatedLocals);
 
     if (isFirebaseConfigured && db) {
       try {
-        await updateDoc(doc(db, 'profiles', id), updates);
+        const firestoreData: any = {};
+        for (const [k, v] of Object.entries(updates)) {
+          if (v !== undefined) firestoreData[k] = v;
+        }
+
+        if (existing) {
+          const merged: any = {};
+          for (const [k, v] of Object.entries({ ...existing, ...updates })) {
+            if (v !== undefined) merged[k] = v;
+          }
+          await setDoc(doc(db, 'profiles', id), merged, { merge: true });
+        } else {
+          await setDoc(doc(db, 'profiles', id), firestoreData, { merge: true });
+        }
       } catch (e) {
         console.error('Firebase updateProfile error:', e);
         return false;

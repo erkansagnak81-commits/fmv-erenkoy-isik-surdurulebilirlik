@@ -177,6 +177,8 @@ export function App() {
         }
       }
       showToast('Kullanıcı bilgileri ve yetkileri güncellendi.');
+    } else {
+      showToast('Kullanıcı güncellenirken bir sorun oluştu.');
     }
   };
 
