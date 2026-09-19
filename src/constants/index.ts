@@ -27,6 +27,7 @@ export const DEPARTMENTS: Department[] = [
   { id: 'dept-sos', name: 'Sosyal Bilimler', code: 'SOS', color: '#3b82f6', headName: 'Kadir Can Tunay' },
   { id: 'dept-dil', name: 'Yabancı Diller Bölümü', code: 'DIL', color: '#ec4899', headName: 'Eda Nezihe Üçöz' },
   { id: 'dept-uyg', name: 'Uygulamalı Dersler (Görsel Sanatlar, Müzik, Beden)', code: 'UYG', color: '#f97316', headName: 'Işıl Zaza Tozlu' },
+  { id: 'dept-bil', name: 'Bilişim Teknolojileri', code: 'BİL', color: '#6366f1', headName: 'Ahmet Salih Taş' },
   { id: 'dept-pdr', name: 'Rehberlik ve Psikolojik Danışmanlık', code: 'PDR', color: '#06b6d4', headName: 'Özlem Sendan' },
 ];
 

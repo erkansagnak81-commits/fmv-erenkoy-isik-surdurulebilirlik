@@ -34,6 +34,7 @@ export const DeptLeaderboard: React.FC<DeptLeaderboardProps> = ({
   }, [projects, curriculums]);
 
   const maxScore = Math.max(...deptStats.map(d => d.totalScore), 1);
+  const activeCount = deptStats.filter(d => d.totalScore > 0).length;
 
   return (
     <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-card-soft">
@@ -53,7 +54,7 @@ export const DeptLeaderboard: React.FC<DeptLeaderboardProps> = ({
         </div>
 
         <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
-          6 Zümre Aktif
+          {activeCount} / {DEPARTMENTS.length} Zümre Aktif
         </span>
       </div>
 

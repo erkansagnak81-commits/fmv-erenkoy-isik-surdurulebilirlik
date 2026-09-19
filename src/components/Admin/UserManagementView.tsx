@@ -666,7 +666,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   <div>
                     <span className="font-bold block text-emerald-950">Yetki Kapsamı: Okul Geneli</span>
                     <span className="text-[11px] text-emerald-800 leading-relaxed">
-                      Sürdürülebilirlik Koordinatörlüğü tüm okulu ve 7 akademik zümreyi kapsadığı için tekil bir zümre seçimi gerekmemektedir.
+                      Sürdürülebilirlik Koordinatörlüğü tüm okulu ve akademik zümreleri kapsadığı için tekil bir zümre seçimi gerekmemektedir.
                     </span>
                   </div>
                 </div>

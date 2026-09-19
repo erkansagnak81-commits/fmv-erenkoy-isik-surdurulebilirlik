@@ -101,7 +101,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
         : 'Sürdürülebilirlik kurulu karar mekanizmasında onaylanmış proje girişi bekleniyor.',
     },
     {
-      title: '7 Akademik Bölümün Müfredat Entegrasyonu',
+      title: `${DEPARTMENTS.length} Akademik Bölümün Müfredat Entegrasyonu`,
       ok: isCurriculumOk,
       statusText: isCurriculumOk ? `${currDeptsCount}/${DEPARTMENTS.length} Zümre Tamam` : `${currDeptsCount}/${DEPARTMENTS.length} Zümre`,
       detail: isCurriculumOk
@@ -259,7 +259,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
           <p className="text-xs text-slate-700 leading-relaxed text-justify">
             FMV Erenköy Işık Lisesi ve Fen Lisesi olarak, 1885'ten bu yana süregelen köklü eğitim geleneğimizi 
             Birleşmiş Milletler Sürdürülebilir Kalkınma Amaçları (SKA) ve Sıfır Atık ilkeleriyle harmanlayarak 
-            7 akademik zümremizin katılımıyla sürdürülebilir bir ekosistem oluşturduk. 
+            tüm akademik zümrelerimizin katılımıyla sürdürülebilir bir ekosistem oluşturduk. 
             Bu dönem içerisinde okulumuzda toplam <strong>{scopedProjects.length} adet proje ve atölye</strong> yürütülmüş, 
             <strong> {scopedCurriculums.length} farklı derste</strong> sürdürülebilirlik kazanımları müfredata işlenmiş ve 
             kampüs genelinde <strong>{totalStudents.toLocaleString('tr-TR')} öğrenciye</strong> aktif olarak temas edilmiştir.

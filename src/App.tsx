@@ -773,7 +773,7 @@ export function App() {
                   </h2>
                   <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-normal">
                     Feyziye Mektepleri Vakfı'nın 1885'ten bu yana süregelen ışığını geleceğe taşıyor; 
-                    7 akademik zümremiz ile çevre bilincini, sıfır atık hedeflerini ve BM Küresel Amaçlarını 
+                    tüm akademik zümrelerimiz ile çevre bilincini, sıfır atık hedeflerini ve BM Küresel Amaçlarını 
                     tek bir ekosistemde buluşturuyoruz.
                   </p>
 
@@ -811,7 +811,7 @@ export function App() {
                 onSelectSdg={handleSdgSelect}
               />
 
-              {/* 7 Zümre Liderlik Tablosu */}
+              {/* Zümre Liderlik Tablosu */}
               <DeptLeaderboard 
                 projects={projects}
                 curriculums={curriculums}
