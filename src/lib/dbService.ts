@@ -119,7 +119,40 @@ function getLocalProjects(): ProjectEvent[] {
     const raw = localStorage.getItem(PROJECTS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Eski yerel verideki başlangıç projelerinin tarihlerini 2026-2027 eğitim yılına güncelle ve eksik projeleri ekle
+        let needsSave = false;
+        const initialMap = new Map(INITIAL_PROJECTS.map(p => [p.id, p]));
+        
+        const updatedList = parsed.map((p: ProjectEvent) => {
+          const initP = initialMap.get(p.id);
+          // Eğer başlangıç projelerinden biriyse ve tarihi aktif eğitim yılı (2026-09-08) öncesinde kalmışsa güncelle
+          if (initP && p.startDate < '2026-09-08') {
+            needsSave = true;
+            return {
+              ...p,
+              startDate: initP.startDate,
+              endDate: initP.endDate || initP.startDate,
+              createdAt: initP.createdAt,
+            };
+          }
+          return p;
+        });
+
+        // Başlangıç listesindeki yeni/eksik projeleri ekle
+        const existingIds = new Set(updatedList.map((p: ProjectEvent) => p.id));
+        for (const initP of INITIAL_PROJECTS) {
+          if (!existingIds.has(initP.id)) {
+            updatedList.push(initP);
+            needsSave = true;
+          }
+        }
+
+        if (needsSave) {
+          saveLocalProjects(updatedList);
+        }
+        return updatedList;
+      }
     }
   } catch (e) {
     console.error('Error reading local projects', e);

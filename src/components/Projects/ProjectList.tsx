@@ -57,7 +57,14 @@ export const ProjectList: React.FC<ProjectListProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
-  const [yearFilter, setYearFilter] = useState<'year' | 'all'>('year');
+  // Başlangıçta aktif yılda proje varsa 'year', yoksa kullanıcıya boş ekran göstermemek için 'all' seçilsin
+  const [yearFilter, setYearFilter] = useState<'year' | 'all'>(() => {
+    if (!activeAcademicYear) return 'all';
+    const hasProjectsInYear = projects.some(
+      p => p.startDate >= activeAcademicYear.startDate && p.startDate <= activeAcademicYear.endDate
+    );
+    return hasProjectsInYear ? 'year' : 'all';
+  });
   
   // Kapsam Sekmesi: 'my' (Bireysel/Zümre) vs 'school' (Okul Geneli İlham Vitrini)
   const [scopeTab, setScopeTab] = useState<'my' | 'school'>(() => {
@@ -133,12 +140,20 @@ export const ProjectList: React.FC<ProjectListProps> = ({
     }
   };
 
-  const schoolScopeCount = projects.filter(p => 
+  // Yıl kapsamındaki projeler (aktif yıl filtresi 'year' ise sadece o yıl, 'all' ise tümü)
+  const yearScopedProjects = projects.filter(p => 
+    yearFilter === 'all' || 
+    !activeAcademicYear || 
+    (p.startDate >= activeAcademicYear.startDate && p.startDate <= activeAcademicYear.endDate)
+  );
+
+  // Sekme Sayaçları (Mevcut yıl filtresine tam senkron)
+  const schoolScopeCount = yearScopedProjects.filter(p => 
     (selectedSdgFilter === null || p.sdgGoals.includes(selectedSdgFilter)) &&
     (p.status === 'coordinator_approved' || p.status === 'completed')
   ).length;
 
-  const poolScopeCount = projects.filter(p => {
+  const poolScopeCount = yearScopedProjects.filter(p => {
     if (selectedSdgFilter !== null && !p.sdgGoals.includes(selectedSdgFilter)) return false;
     if (currentUser.role === 'teacher') {
       const isCollaborator = p.collaboratingTeachers?.some(t => 
@@ -152,6 +167,39 @@ export const ProjectList: React.FC<ProjectListProps> = ({
     }
     return true;
   }).length;
+
+  // Tüm Zamanlar ve Aktif Yıl İstatistikleri (Filtre butonlarında ve boş durum uyarılarında kullanım için)
+  const totalAllYearsPoolCount = projects.filter(p => {
+    if (selectedSdgFilter !== null && !p.sdgGoals.includes(selectedSdgFilter)) return false;
+    if (currentUser.role === 'teacher') {
+      const isCollaborator = p.collaboratingTeachers?.some(t => 
+        t.toLowerCase().includes(currentUser.name.toLowerCase())
+      );
+      return p.advisorId === currentUser.id || 
+        p.advisorName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+        isCollaborator;
+    } else if (currentUser.role === 'dept_head') {
+      return p.departmentId === currentUser.departmentId;
+    }
+    return true;
+  }).length;
+
+  const activeYearPoolCount = activeAcademicYear ? projects.filter(p => {
+    if (selectedSdgFilter !== null && !p.sdgGoals.includes(selectedSdgFilter)) return false;
+    const inYear = p.startDate >= activeAcademicYear.startDate && p.startDate <= activeAcademicYear.endDate;
+    if (!inYear) return false;
+    if (currentUser.role === 'teacher') {
+      const isCollaborator = p.collaboratingTeachers?.some(t => 
+        t.toLowerCase().includes(currentUser.name.toLowerCase())
+      );
+      return p.advisorId === currentUser.id || 
+        p.advisorName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+        isCollaborator;
+    } else if (currentUser.role === 'dept_head') {
+      return p.departmentId === currentUser.departmentId;
+    }
+    return true;
+  }).length : totalAllYearsPoolCount;
 
   const canEditProject = (project: ProjectEvent) => {
     if (project.status !== 'draft' && project.status !== 'revision_needed') return false;
@@ -401,7 +449,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                       : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
-                  {activeAcademicYear.name}
+                  {activeAcademicYear.name} ({activeYearPoolCount})
                 </button>
                 <button
                   type="button"
@@ -412,7 +460,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                       : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
-                  Tüm Yıllar
+                  Tüm Yıllar ({totalAllYearsPoolCount})
                 </button>
               </div>
             )}
@@ -475,14 +523,49 @@ export const ProjectList: React.FC<ProjectListProps> = ({
 
       {/* Proje Kartları Listesi */}
       {filteredProjects.length === 0 ? (
-        <div className="bg-white rounded-2xl p-12 text-center border border-slate-200/80 shadow-card-soft">
-          <Sparkles className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-sm font-bold text-slate-800">Henüz bu kriterde bir çalışma bulunmuyor</h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            {scopeTab === 'school' 
-              ? 'Okul vitrininde görüntülenecek onaylı bir çalışma bulunamadı. Filtrelerinizi temizleyebilirsiniz.' 
-              : 'Arama filtrenizi temizleyebilir veya yeni bir sürdürülebilirlik projesi önerisinde bulunabilirsiniz.'}
+        <div className="bg-white rounded-2xl p-10 text-center border border-slate-200/80 shadow-card-soft">
+          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-amber-200">
+            <Sparkles className="w-6 h-6" />
+          </div>
+          <h3 className="text-sm font-bold text-slate-800">
+            {yearFilter === 'year' && totalAllYearsPoolCount > 0
+              ? `${activeAcademicYear?.name || 'Seçili Eğitim Yılı'} Kapsamında Faaliyet Bulunmuyor`
+              : 'Henüz bu kriterde bir çalışma bulunmuyor'}
+          </h3>
+          <p className="text-xs text-slate-500 mt-1.5 max-w-md mx-auto leading-relaxed">
+            {yearFilter === 'year' && totalAllYearsPoolCount > 0 ? (
+              <>
+                {activeAcademicYear?.name || 'Aktif eğitim-öğretim yılı'} için henüz bu filtreye uygun bir proje bulunamadı. Ancak sistemde diğer dönemlere ait toplam <strong>{totalAllYearsPoolCount} adet</strong> faaliyet mevcuttur.
+              </>
+            ) : (
+              scopeTab === 'school' 
+                ? 'Okul vitrininde görüntülenecek onaylı bir çalışma bulunamadı. Filtrelerinizi temizleyebilirsiniz.' 
+                : 'Arama filtrenizi temizleyebilir veya yeni bir sürdürülebilirlik projesi önerisinde bulunabilirsiniz.'
+            )}
           </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            {yearFilter === 'year' && totalAllYearsPoolCount > 0 && (
+              <button
+                onClick={() => setYearFilter('all')}
+                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Tüm Yıllardaki Projeleri Listele ({totalAllYearsPoolCount})</span>
+              </button>
+            )}
+            {(searchTerm || statusFilter !== 'all' || departmentFilter !== 'all') && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setStatusFilter('all');
+                  setDepartmentFilter('all');
+                }}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+              >
+                Filtreleri Sıfırla
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -132,12 +132,12 @@ export const INITIAL_PROJECTS: ProjectEvent[] = [
     eventType: 'Atölye',
     sdgGoals: [12, 13, 15],
     targetGrades: ['Erenköy Işık Lisesi - Hazırlık', 'Erenköy Işık Lisesi - 9', 'Erenköy Işık Lisesi - 10'],
-    startDate: '2026-03-12',
-    endDate: '2026-03-12',
+    startDate: '2026-09-12',
+    endDate: '2026-09-12',
     location: 'Okul Bahçesi & Fen Laboratuvarı',
     resourceNeeds: 'Kompost kutuları, koruyucu eldivenler, organik atık tartısı',
     status: 'completed',
-    createdAt: '2026-02-15T10:00:00Z',
+    createdAt: '2026-09-01T10:00:00Z',
     impactReport: {
       id: 'rep-1',
       projectId: 'proj-1',
@@ -148,7 +148,7 @@ export const INITIAL_PROJECTS: ProjectEvent[] = [
       photoUrls: [
         'https://images.unsplash.com/photo-1584467735815-f778f274e296?w=400&auto=format&fit=crop&q=80'
       ],
-      completedAt: '2026-03-14T14:30:00Z'
+      completedAt: '2026-09-14T14:30:00Z'
     }
   },
   {
@@ -162,12 +162,12 @@ export const INITIAL_PROJECTS: ProjectEvent[] = [
     eventType: 'Atölye',
     sdgGoals: [7, 9, 13],
     targetGrades: ['Erenköy Işık Fen Lisesi - 10', 'Erenköy Işık Fen Lisesi - 11'],
-    startDate: '2026-04-18',
-    endDate: '2026-04-20',
+    startDate: '2026-10-18',
+    endDate: '2026-10-20',
     location: 'Maker / Fen Atölyesi',
     resourceNeeds: '100W Güneş paneli kiti, regülatör, USB çıkış üniteleri',
     status: 'coordinator_approved',
-    createdAt: '2026-03-01T09:00:00Z'
+    createdAt: '2026-09-02T09:00:00Z'
   },
   {
     id: 'proj-3',
@@ -179,7 +179,7 @@ export const INITIAL_PROJECTS: ProjectEvent[] = [
     eventType: 'Farkındalık Kampanyası',
     sdgGoals: [12, 14],
     targetGrades: ['Tüm Okul'],
-    startDate: '2026-05-02',
+    startDate: '2026-10-14',
     location: 'Kantin & Fuaye Alanı',
     resourceNeeds: 'Afiş baskıları, 3 adet ek arıtmalı su sebili onayı',
     status: 'submitted',
@@ -195,7 +195,7 @@ export const INITIAL_PROJECTS: ProjectEvent[] = [
     eventType: 'Yarışma',
     sdgGoals: [4, 12, 13],
     targetGrades: ['Erenköy Işık Lisesi - 9', 'Erenköy Işık Lisesi - 10', 'Erenköy Işık Fen Lisesi - 9', 'Erenköy Işık Fen Lisesi - 10'],
-    startDate: '2026-05-10',
+    startDate: '2026-10-28',
     location: 'Kütüphane & Konferans Salonu',
     resourceNeeds: 'Yarışma şartnamesi basımı, jüri değerlendirme formu, ödül kitap setleri',
     status: 'coordinator_approved',
@@ -211,7 +211,7 @@ export const INITIAL_PROJECTS: ProjectEvent[] = [
     eventType: 'Müfredat İçi Proje',
     sdgGoals: [12, 15],
     targetGrades: ['Erenköy Işık Lisesi - 9', 'Erenköy Işık Lisesi - 10', 'Erenköy Işık Lisesi - 11'],
-    startDate: '2026-05-25',
+    startDate: '2026-11-12',
     location: 'Sanat Galerisi & Fuaye',
     resourceNeeds: 'Sergi ayaklıkları, su bazlı boyalar, spot aydınlatma',
     status: 'coordinator_approved',
@@ -227,7 +227,7 @@ export const INITIAL_PROJECTS: ProjectEvent[] = [
     eventType: 'Seminer / Konferans',
     sdgGoals: [3, 4],
     targetGrades: ['Erenköy Işık Lisesi - 11', 'Erenköy Işık Lisesi - 12', 'Erenköy Işık Fen Lisesi - 11', 'Erenköy Işık Fen Lisesi - 12'],
-    startDate: '2026-06-02',
+    startDate: '2026-11-25',
     location: 'PDR Grup Çalışma Odası',
     resourceNeeds: 'Minderler, rahatlama ses sistemi',
     status: 'submitted',
@@ -243,7 +243,7 @@ export const INITIAL_PROJECTS: ProjectEvent[] = [
     eventType: 'Müfredat İçi Proje',
     sdgGoals: [6, 12, 13],
     targetGrades: ['Erenköy Işık Lisesi - 10', 'Erenköy Işık Fen Lisesi - 10'],
-    startDate: '2026-06-15',
+    startDate: '2026-12-05',
     location: 'Okul Bahçesi & Su Deposu Alanı',
     resourceNeeds: 'Filtre tankı, mekanik sayaç, damlama boruları',
     status: 'draft',
@@ -259,7 +259,7 @@ export const INITIAL_PROJECTS: ProjectEvent[] = [
     eventType: 'Atölye',
     sdgGoals: [4, 12, 13],
     targetGrades: ['Erenköy Işık Lisesi - 11', 'Erenköy Işık Fen Lisesi - 11'],
-    startDate: '2026-05-20',
+    startDate: '2026-10-22',
     location: 'Matematik & Kodlama Laboratuvarı',
     resourceNeeds: 'Dizüstü bilgisayarlar, veri analitiği yazılımı',
     status: 'draft',
@@ -276,7 +276,7 @@ export const INITIAL_PROJECTS: ProjectEvent[] = [
     eventType: 'Müfredat İçi Proje',
     sdgGoals: [7, 9, 12],
     targetGrades: ['Erenköy Işık Fen Lisesi - 11', 'Erenköy Işık Lisesi - 11'],
-    startDate: '2026-05-15',
+    startDate: '2026-11-15',
     location: 'Matematik Zümre Odası',
     resourceNeeds: 'Elektrik faturası geçmiş dökümleri, simülasyon yazılımı',
     status: 'submitted',
