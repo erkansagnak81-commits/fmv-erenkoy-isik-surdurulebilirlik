@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ProjectEvent, UserProfile, ProjectStatus, AcademicYear } from '../../types';
 import { DEPARTMENTS, SDG_GOALS, parseTargetGrades, isSuperAdminEmail } from '../../constants';
 import { exportProjectsToCsv } from '../../lib/exportUtils';
@@ -66,11 +66,27 @@ export const ProjectList: React.FC<ProjectListProps> = ({
     return hasProjectsInYear ? 'year' : 'all';
   });
   
-  // Kapsam Sekmesi: 'my' (Bireysel/Zümre) vs 'school' (Okul Geneli İlham Vitrini)
+  // Kapsam Sekmesi: 'my' (Bireysel/Zümre/Tüm Havuz) vs 'school' (Okul Geneli İlham Vitrini)
+  // Koordinatör veya admin için vitrinde onaylı proje varsa vitrinle, yoksa doğrudan tüm havuzla başla
   const [scopeTab, setScopeTab] = useState<'my' | 'school'>(() => {
-    if (currentUser.role === 'coordinator' || currentUser.role === 'admin') return 'school';
+    if (currentUser.role === 'coordinator' || currentUser.role === 'admin') {
+      const hasApproved = projects.some(p => p.status === 'coordinator_approved' || p.status === 'completed');
+      return hasApproved ? 'school' : 'my';
+    }
     return 'my';
   });
+
+  // Projeler asenkron yüklendiğinde; koordinatör/admin için okul vitrininde onaylı proje yoksa boş ekran göstermemek adına 'my' (Tüm Proje Havuzu) sekmesine otomatik odaklan
+  const hasAutoSelectedScopeRef = useRef(false);
+  useEffect(() => {
+    if (!hasAutoSelectedScopeRef.current && projects.length > 0) {
+      hasAutoSelectedScopeRef.current = true;
+      const hasApproved = projects.some(p => p.status === 'coordinator_approved' || p.status === 'completed');
+      if (!hasApproved && (currentUser.role === 'coordinator' || currentUser.role === 'admin')) {
+        setScopeTab('my');
+      }
+    }
+  }, [projects, currentUser.role]);
 
   // Detay Modalı State
   const [detailProject, setDetailProject] = useState<ProjectEvent | null>(null);
@@ -201,6 +217,35 @@ export const ProjectList: React.FC<ProjectListProps> = ({
     return true;
   }).length : totalAllYearsPoolCount;
 
+  // Okul Vitrini Tüm Yıllar ve Aktif Yıl İstatistikleri
+  const schoolAllYearsCount = projects.filter(p => 
+    (selectedSdgFilter === null || p.sdgGoals.includes(selectedSdgFilter)) &&
+    (p.status === 'coordinator_approved' || p.status === 'completed')
+  ).length;
+
+  const schoolActiveYearCount = activeAcademicYear ? projects.filter(p => 
+    (selectedSdgFilter === null || p.sdgGoals.includes(selectedSdgFilter)) &&
+    (p.status === 'coordinator_approved' || p.status === 'completed') &&
+    p.startDate >= activeAcademicYear.startDate && p.startDate <= activeAcademicYear.endDate
+  ).length : schoolAllYearsCount;
+
+  // Aktif yılda hiç proje yoksa ama diğer yıllarda proje varsa, kullanıcının boş ekran görmemesi için otomatik olarak 'all' (Tüm Yıllar) seçilsin
+  useEffect(() => {
+    if (activeAcademicYear && yearFilter === 'year' && activeYearPoolCount === 0 && totalAllYearsPoolCount > 0) {
+      setYearFilter('all');
+    }
+  }, [activeAcademicYear, activeYearPoolCount, totalAllYearsPoolCount, yearFilter]);
+
+  // Buton sayaçları:
+  // Okul vitrinindeyken onaylı proje varsa vitrin sayısını; vitrin boş ama havuzda proje varsa havuz sayısını yansıtır
+  const activeYearDisplayCount = scopeTab === 'school' && schoolActiveYearCount > 0
+    ? schoolActiveYearCount
+    : (scopeTab === 'school' && schoolScopeCount === 0 ? activeYearPoolCount : (scopeTab === 'school' ? 0 : activeYearPoolCount));
+
+  const allYearsDisplayCount = scopeTab === 'school' && schoolAllYearsCount > 0
+    ? schoolAllYearsCount
+    : (scopeTab === 'school' && schoolScopeCount === 0 ? totalAllYearsPoolCount : (scopeTab === 'school' ? 0 : totalAllYearsPoolCount));
+
   const canEditProject = (project: ProjectEvent) => {
     if (project.status !== 'draft' && project.status !== 'revision_needed') return false;
     if (currentUser.role === 'coordinator' || currentUser.role === 'admin') return true;
@@ -323,7 +368,9 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                 ? 'FMV Erenköy Işık Lisesi ve Fen Lisesi zümrelerimizin okul takvimine onaylanmış ve tamamlanmış tüm sürdürülebilirlik projeleri.'
                 : currentUser.role === 'teacher'
                 ? 'Yalnızca danışmanlığını yürüttüğünüz taslak, onay aşamasındaki veya tamamlanmış faaliyetleriniz listelenmektedir.'
-                : 'Zümreniz bünyesindeki öğretmenlerin yürüttüğü ve onay bekleyen faaliyetler.'}
+                : currentUser.role === 'dept_head'
+                ? 'Zümreniz bünyesindeki öğretmenlerin yürüttüğü ve onay bekleyen faaliyetler.'
+                : 'Tüm zümreler ve danışman öğretmenlerin hazırlık, onay veya yayın aşamasındaki tüm faaliyet havuzu.'}
             </p>
           </div>
 
@@ -361,8 +408,11 @@ export const ProjectList: React.FC<ProjectListProps> = ({
         {/* Sekme Geçişi: Okul Geneli Vitrin vs Bireysel / Zümre */}
         <div className="flex items-center gap-2 border-t border-slate-100 pt-3">
           <button
-            onClick={() => setScopeTab('school')}
-            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            onClick={() => {
+              setScopeTab('school');
+              setStatusFilter('all');
+            }}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               scopeTab === 'school'
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -378,8 +428,11 @@ export const ProjectList: React.FC<ProjectListProps> = ({
           </button>
 
           <button
-            onClick={() => setScopeTab('my')}
-            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            onClick={() => {
+              setScopeTab('my');
+              setStatusFilter('all');
+            }}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               scopeTab === 'my'
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -401,8 +454,30 @@ export const ProjectList: React.FC<ProjectListProps> = ({
           </button>
         </div>
 
+        {/* Okul Vitrini Boşken Havuzda Proje Varsa Bilgilendirme Notu */}
+        {scopeTab === 'school' && schoolScopeCount === 0 && (poolScopeCount > 0 || totalAllYearsPoolCount > 0) && (
+          <div className="flex items-center justify-between gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-950 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                Okul vitrininde henüz koordinatör onaylı veya tamamlanmış bir faaliyet bulunmuyor.
+                Hazırlık ve onay sürecindeki mevcut <strong>{poolScopeCount > 0 ? poolScopeCount : totalAllYearsPoolCount} faaliyeti</strong> incelemek için <strong>"Tüm Proje Havuzu"</strong> sekmesine geçebilirsiniz.
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                setScopeTab('my');
+                setStatusFilter('all');
+              }}
+              className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-lg shrink-0 transition-colors cursor-pointer text-xs"
+            >
+              Havuzdaki Faaliyetleri Göster ({poolScopeCount > 0 ? poolScopeCount : totalAllYearsPoolCount})
+            </button>
+          </div>
+        )}
+
         {/* SKA Filtresi Aktifken Bilgilendirme Notu */}
-        {selectedSdgFilter && scopeTab === 'school' && poolScopeCount > schoolScopeCount && (
+        {selectedSdgFilter && scopeTab === 'school' && poolScopeCount > schoolScopeCount && schoolScopeCount > 0 && (
           <div className="flex items-center justify-between gap-3 p-3 bg-blue-50/90 border border-blue-200 rounded-xl text-xs text-blue-950 animate-in fade-in">
             <div className="flex items-center gap-2">
               <Info className="w-4 h-4 text-blue-600 shrink-0" />
@@ -412,7 +487,10 @@ export const ProjectList: React.FC<ProjectListProps> = ({
               </span>
             </div>
             <button
-              onClick={() => setScopeTab('my')}
+              onClick={() => {
+                setScopeTab('my');
+                setStatusFilter('all');
+              }}
               className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shrink-0 transition-colors cursor-pointer"
             >
               Tümünü Gör ({poolScopeCount})
@@ -442,25 +520,37 @@ export const ProjectList: React.FC<ProjectListProps> = ({
               <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-xl border border-slate-200 text-xs shrink-0">
                 <button
                   type="button"
-                  onClick={() => setYearFilter('year')}
+                  onClick={() => {
+                    setYearFilter('year');
+                    if (scopeTab === 'school' && schoolActiveYearCount === 0 && activeYearPoolCount > 0) {
+                      setScopeTab('my');
+                      setStatusFilter('all');
+                    }
+                  }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     yearFilter === 'year'
                       ? 'bg-white text-teal-900 shadow-2xs font-bold'
                       : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
-                  {activeAcademicYear.name} ({activeYearPoolCount})
+                  {activeAcademicYear.name} ({activeYearDisplayCount})
                 </button>
                 <button
                   type="button"
-                  onClick={() => setYearFilter('all')}
+                  onClick={() => {
+                    setYearFilter('all');
+                    if (scopeTab === 'school' && schoolAllYearsCount === 0 && totalAllYearsPoolCount > 0) {
+                      setScopeTab('my');
+                      setStatusFilter('all');
+                    }
+                  }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     yearFilter === 'all'
                       ? 'bg-white text-teal-900 shadow-2xs font-bold'
                       : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
-                  Tüm Yıllar ({totalAllYearsPoolCount})
+                  Tüm Yıllar ({allYearsDisplayCount})
                 </button>
               </div>
             )}
@@ -530,12 +620,18 @@ export const ProjectList: React.FC<ProjectListProps> = ({
           <h3 className="text-sm font-bold text-slate-800">
             {yearFilter === 'year' && totalAllYearsPoolCount > 0
               ? `${activeAcademicYear?.name || 'Seçili Eğitim Yılı'} Kapsamında Faaliyet Bulunmuyor`
+              : scopeTab === 'school' && (poolScopeCount > 0 || totalAllYearsPoolCount > 0)
+              ? 'Okul Vitrininde Onaylı Faaliyet Bulunmuyor'
               : 'Henüz bu kriterde bir çalışma bulunmuyor'}
           </h3>
           <p className="text-xs text-slate-500 mt-1.5 max-w-md mx-auto leading-relaxed">
             {yearFilter === 'year' && totalAllYearsPoolCount > 0 ? (
               <>
-                {activeAcademicYear?.name || 'Aktif eğitim-öğretim yılı'} için henüz bu filtreye uygun bir proje bulunamadı. Ancak sistemde diğer dönemlere ait toplam <strong>{totalAllYearsPoolCount} adet</strong> faaliyet mevcuttur.
+                {activeAcademicYear?.name || 'Aktif eğitim-öğretim yılı'} için henüz bu filtreye uygun bir faaliyet bulunamadı. Ancak sistemde diğer dönemlere ait toplam <strong>{totalAllYearsPoolCount} adet</strong> faaliyet mevcuttur.
+              </>
+            ) : scopeTab === 'school' && (poolScopeCount > 0 || totalAllYearsPoolCount > 0) ? (
+              <>
+                Okul vitrininde yalnızca okul takvimine onaylanmış veya tamamlanmış faaliyetler sergilenir. Şu anda havuzda onay bekleyen veya hazırlık aşamasında <strong>{poolScopeCount > 0 ? poolScopeCount : totalAllYearsPoolCount} adet</strong> faaliyet bulunmaktadır.
               </>
             ) : (
               scopeTab === 'school' 
@@ -544,21 +640,43 @@ export const ProjectList: React.FC<ProjectListProps> = ({
             )}
           </p>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            {scopeTab === 'school' && (poolScopeCount > 0 || totalAllYearsPoolCount > 0) && (
+              <button
+                onClick={() => {
+                  setScopeTab('my');
+                  setStatusFilter('all');
+                  setYearFilter('all');
+                }}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Tüm Proje Havuzunu Listele ({poolScopeCount > 0 ? poolScopeCount : totalAllYearsPoolCount})</span>
+              </button>
+            )}
+
             {yearFilter === 'year' && totalAllYearsPoolCount > 0 && (
               <button
-                onClick={() => setYearFilter('all')}
+                onClick={() => {
+                  setYearFilter('all');
+                  if (scopeTab === 'school' && schoolAllYearsCount === 0 && totalAllYearsPoolCount > 0) {
+                    setScopeTab('my');
+                    setStatusFilter('all');
+                  }
+                }}
                 className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
               >
                 <Eye className="w-3.5 h-3.5" />
                 <span>Tüm Yıllardaki Projeleri Listele ({totalAllYearsPoolCount})</span>
               </button>
             )}
-            {(searchTerm || statusFilter !== 'all' || departmentFilter !== 'all') && (
+
+            {(searchTerm || statusFilter !== 'all' || departmentFilter !== 'all' || selectedSdgFilter !== null) && (
               <button
                 onClick={() => {
                   setSearchTerm('');
                   setStatusFilter('all');
                   setDepartmentFilter('all');
+                  if (onClearSdgFilter) onClearSdgFilter();
                 }}
                 className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all cursor-pointer"
               >
