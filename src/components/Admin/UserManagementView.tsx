@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { UserProfile, UserRole } from '../../types';
 import { DEPARTMENTS, isSuperAdminEmail } from '../../constants';
 import { 
@@ -16,15 +16,8 @@ import {
   AlertCircle,
   Camera,
   Upload,
-  Link2,
-  Download,
-  Database,
-  RefreshCw,
-  AlertTriangle,
-  CheckCircle2,
-  FileJson
+  Link2
 } from 'lucide-react';
-import { parseDatabaseBackupJson, ParsedDatabaseBackup } from '../../lib/exportUtils';
 import { processImageFile } from '../../lib/imageUtils';
 
 interface UserManagementViewProps {
@@ -33,11 +26,6 @@ interface UserManagementViewProps {
   onUpdateProfile: (id: string, updates: Partial<UserProfile>) => Promise<void>;
   onDeleteProfile: (id: string) => Promise<void>;
   currentUser: UserProfile;
-  onExportBackup?: () => void;
-  onRestoreBackup?: (backupData: ParsedDatabaseBackup) => Promise<void>;
-  onSyncSeedData?: () => Promise<void>;
-  onClearTestData?: () => Promise<void>;
-  isSyncing?: boolean;
 }
 
 export const UserManagementView: React.FC<UserManagementViewProps> = ({
@@ -46,23 +34,10 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   onUpdateProfile,
   onDeleteProfile,
   currentUser,
-  onExportBackup,
-  onRestoreBackup,
-  onSyncSeedData,
-  onClearTestData,
-  isSyncing = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [deptFilter, setDeptFilter] = useState<string>('all');
-
-  // Yedek ve Veritabanı Yönetim Durumları
-  const backupFileInputRef = useRef<HTMLInputElement>(null);
-  const [pendingRestoreData, setPendingRestoreData] = useState<ParsedDatabaseBackup | null>(null);
-  const [restoreError, setRestoreError] = useState<string | null>(null);
-  const [isRestoring, setIsRestoring] = useState(false);
-  const [confirmSeedModal, setConfirmSeedModal] = useState(false);
-  const [confirmClearModal, setConfirmClearModal] = useState(false);
 
   // Modal Durumları
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -214,44 +189,6 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       console.error('Silme hatası:', err);
     }
   };
-
-  // Yedek Dosyası Seçildiğinde
-  const handleBackupFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      const result = parseDatabaseBackupJson(content);
-      if (!result.success || !result.data) {
-        setRestoreError(result.error || 'Yedek dosyası doğrulanamadı.');
-        return;
-      }
-      setRestoreError(null);
-      setPendingRestoreData(result.data);
-    };
-    reader.onerror = () => {
-      setRestoreError('Dosya okunamadı. Lütfen geçerli bir JSON dosyası seçiniz.');
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  // Yedek Geri Yükleme Onayı
-  const handleConfirmRestore = async () => {
-    if (!pendingRestoreData || !onRestoreBackup) return;
-    setIsRestoring(true);
-    try {
-      await onRestoreBackup(pendingRestoreData);
-      setPendingRestoreData(null);
-    } catch (err: any) {
-      setRestoreError(`Geri yükleme hatası: ${err.message || 'Bilinmeyen hata'}`);
-    } finally {
-      setIsRestoring(false);
-    }
-  };
-
 
   // Filtreleme
   const filteredProfiles = profiles.filter(profile => {
@@ -539,313 +476,6 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           </table>
         </div>
       </div>
-
-      {/* SİSTEM VE VERİTABANI YÖNETİMİ (YALNIZCA ERKAN SAĞNAK) */}
-      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden p-6 sm:p-8 space-y-6">
-        {/* Gizli JSON Dosya Seçici */}
-        <input 
-          type="file" 
-          ref={backupFileInputRef} 
-          accept=".json,application/json" 
-          onChange={handleBackupFileSelect} 
-          className="hidden" 
-        />
-
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-5 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-slate-900 text-amber-400 flex items-center justify-center font-bold shadow-xs shrink-0">
-              <Database className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-extrabold text-slate-900 text-base sm:text-lg tracking-tight">
-                Sistem &amp; Veritabanı Yönetimi
-              </h3>
-              <p className="text-xs text-slate-500 font-medium">
-                Tüm okul verilerini JSON olarak yedekleyin, geri yükleyin veya bulut veritabanını yönetin (Yalnızca Ana Yönetici).
-              </p>
-            </div>
-          </div>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200 shrink-0 self-start sm:self-auto">
-            <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
-            <span>Süper Yönetici Yetkisi</span>
-          </span>
-        </div>
-
-        {/* Hata Bildirimi */}
-        {restoreError && (
-          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start justify-between gap-3">
-            <div className="flex items-start gap-2.5">
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold">Yedek İşleme Hatası</p>
-                <p className="mt-0.5 text-rose-700">{restoreError}</p>
-              </div>
-            </div>
-            <button 
-              onClick={() => setRestoreError(null)} 
-              className="p-1 rounded-lg text-rose-600 hover:bg-rose-100 text-xs font-bold"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* 4 Ana İşlem Kartı */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Kart 1: JSON Yedek İndir */}
-          <div className="p-5 rounded-2xl border border-slate-200/80 bg-slate-50/50 hover:bg-slate-50 transition-all flex flex-col justify-between space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
-                  <Download className="w-4 h-4" />
-                </div>
-                <h4 className="font-bold text-slate-900 text-sm">
-                  Veritabanı Yedeği İndir (JSON)
-                </h4>
-              </div>
-              <p className="text-xs text-slate-600 leading-relaxed font-normal">
-                Tüm onaylı ve taslak projeler, müfredat kazanımları, aylık tüketim sayaçları ve aktif eğitim yılı ayarlarını tek tıkla güvenli JSON formatında bilgisayarınıza indirin.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={onExportBackup}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-all cursor-pointer w-full sm:w-auto"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Tam JSON Yedeğini İndir</span>
-            </button>
-          </div>
-
-          {/* Kart 2: JSON Yedeğinden Geri Yükle */}
-          <div className="p-5 rounded-2xl border border-slate-200/80 bg-slate-50/50 hover:bg-slate-50 transition-all flex flex-col justify-between space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center font-bold">
-                  <FileJson className="w-4 h-4" />
-                </div>
-                <h4 className="font-bold text-slate-900 text-sm">
-                  Yedekten Geri Yükle (JSON)
-                </h4>
-              </div>
-              <p className="text-xs text-slate-600 leading-relaxed font-normal">
-                Önceden bilgisayarınıza indirdiğiniz JSON yedek dosyasını yükleyin. Veriler güvenle taranır ve özet onayınız alındıktan sonra Cloud Firestore ve yerel belleğe işlenir.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => backupFileInputRef.current?.click()}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer w-full sm:w-auto"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span>JSON Dosyası Seç &amp; Yükle</span>
-            </button>
-          </div>
-
-          {/* Kart 3: Örnek Verileri Tohumla (Seed) */}
-          <div className="p-5 rounded-2xl border border-slate-200/80 bg-slate-50/50 hover:bg-slate-50 transition-all flex flex-col justify-between space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
-                  <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                </div>
-                <h4 className="font-bold text-slate-900 text-sm">
-                  Örnek FMV Erenköy Işık Verileri
-                </h4>
-              </div>
-              <p className="text-xs text-slate-600 leading-relaxed font-normal">
-                7 akademik zümrenin örnek sürdürülebilirlik projelerini, müfredat kazanımlarını ve 2026-2027 tüketim sayaçlarını veritabanına aktarır.
-              </p>
-            </div>
-            <button
-              type="button"
-              disabled={isSyncing}
-              onClick={() => setConfirmSeedModal(true)}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs transition-all cursor-pointer w-full sm:w-auto disabled:opacity-50"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-              <span>{isSyncing ? 'Senkronize Ediliyor...' : 'Örnek Verileri Tohumla'}</span>
-            </button>
-          </div>
-
-          {/* Kart 4: Deneme Verilerini Temizle */}
-          <div className="p-5 rounded-2xl border border-rose-200/70 bg-rose-50/30 hover:bg-rose-50/50 transition-all flex flex-col justify-between space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-800 flex items-center justify-center font-bold">
-                  <Trash2 className="w-4 h-4" />
-                </div>
-                <h4 className="font-bold text-rose-900 text-sm">
-                  Deneme Verilerini Sıfırla
-                </h4>
-              </div>
-              <p className="text-xs text-slate-600 leading-relaxed font-normal">
-                Kullanıcı profilleri ve yetkilerine dokunmadan; girilmiş olan tüm test projelerini, müfredat planlarını ve kampüs sayaçlarını sıfırlar.
-              </p>
-            </div>
-            <button
-              type="button"
-              disabled={isSyncing}
-              onClick={() => setConfirmClearModal(true)}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 font-bold text-xs transition-all cursor-pointer w-full sm:w-auto disabled:opacity-50"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-              <span>{isSyncing ? 'Temizleniyor...' : 'Deneme Verilerini Temizle'}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* YEDEK GERİ YÜKLEME ONAY MODALI */}
-      {pendingRestoreData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 space-y-5">
-            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-              <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-800 flex items-center justify-center font-bold shrink-0">
-                <FileJson className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-extrabold text-slate-900 text-base">
-                  JSON Yedek Dosyası Doğrulandı
-                </h3>
-                <p className="text-xs text-slate-500 font-medium">
-                  {pendingRestoreData.exportedAt ? `Yedek Tarihi: ${new Date(pendingRestoreData.exportedAt).toLocaleString('tr-TR')}` : 'Geçerli Sistem Yedeği'}
-                </p>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5 text-xs text-slate-700">
-              <p className="font-bold text-slate-900">Yedek Dosyası İçeriği:</p>
-              <ul className="space-y-1.5 list-disc list-inside">
-                <li><strong className="text-emerald-700 font-semibold">{pendingRestoreData.projects.length}</strong> adet Proje ve Etkinlik</li>
-                <li><strong className="text-blue-700 font-semibold">{pendingRestoreData.curriculums.length}</strong> adet Müfredat Kazanım Eşleştirmesi</li>
-                <li><strong className="text-teal-700 font-semibold">{pendingRestoreData.campusMetrics.length}</strong> adet Kampüs Tüketim &amp; Sayaç Verisi</li>
-                {pendingRestoreData.academicYears && pendingRestoreData.academicYears.length > 0 && (
-                  <li><strong className="text-amber-700 font-semibold">{pendingRestoreData.academicYears.length}</strong> adet Eğitim-Öğretim Yılı Tanımı</li>
-                )}
-                {pendingRestoreData.profiles && pendingRestoreData.profiles.length > 0 && (
-                  <li><strong className="text-slate-700 font-semibold">{pendingRestoreData.profiles.length}</strong> adet Kullanıcı Profili</li>
-                )}
-              </ul>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <span>
-                <strong>Dikkat:</strong> Geri yükleme işlemi, mevcut veritabanınızı yedek dosyasındaki kayıtlarla güncelleyecektir. Bu işlemi onaylıyor musunuz?
-              </span>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                disabled={isRestoring}
-                onClick={() => setPendingRestoreData(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                disabled={isRestoring}
-                onClick={handleConfirmRestore}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
-              >
-                {isRestoring ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Geri Yükleniyor...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Evet, Yedeği Geri Yükle</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ÖRNEK VERİLERİ TOHUMLA ONAY MODALI */}
-      {confirmSeedModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 space-y-4">
-            <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100">
-              <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shrink-0">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <h3 className="font-bold text-slate-900 text-base">
-                Örnek Verileri Tohumla (Seed)
-              </h3>
-            </div>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              FMV Erenköy Işık Lisesi ve Fen Lisesi'ne ait 7 zümre projeleri, müfredat kazanımları ve aylık sayaç verileri veritabanına aktarılacaktır. Devam etmek istiyor musunuz?
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setConfirmSeedModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setConfirmSeedModal(false);
-                  if (onSyncSeedData) await onSyncSeedData();
-                }}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 transition-all cursor-pointer shadow-xs"
-              >
-                Evet, Tohumla
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* DENEME VERİLERİNİ TEMİZLE ONAY MODALI */}
-      {confirmClearModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 space-y-4">
-            <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100">
-              <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-800 flex items-center justify-center font-bold shrink-0">
-                <Trash2 className="w-4 h-4" />
-              </div>
-              <h3 className="font-bold text-slate-900 text-base">
-                Deneme Verilerini Sıfırla
-              </h3>
-            </div>
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <span>
-                <strong>Uyarı:</strong> Kullanıcı profilleri korunacak; tüm deneme projeleri, müfredat kayıtları ve sayaç verileri kalıcı olarak sıfırlanacaktır. Bu işlem geri alınamaz!
-              </span>
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setConfirmClearModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setConfirmClearModal(false);
-                  if (onClearTestData) await onClearTestData();
-                }}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-all cursor-pointer shadow-xs"
-              >
-                Evet, Tüm Verileri Sıfırla
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Kullanıcı Ekleme / Düzenleme Modalı */}
       {isModalOpen && (

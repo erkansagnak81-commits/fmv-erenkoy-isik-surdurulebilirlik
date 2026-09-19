@@ -15,7 +15,6 @@ import {
   DEFAULT_SIMULATION_USERS as MOCK_USERS, 
   INITIAL_PROFILES
 } from './data/initialData';
-import { exportDatabaseBackupJson, ParsedDatabaseBackup } from './lib/exportUtils';
 import { dbService } from './lib/dbService';
 import { isFirebaseConfigured, auth } from './lib/firebase';
 import { Header } from './components/Layout/Header';
@@ -99,7 +98,6 @@ export function App() {
   const [metrics, setMetrics] = useState<CampusMetric[]>(() => dbService.getLocalCampusMetrics());
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [activeAcademicYear, setActiveAcademicYear] = useState<AcademicYear | undefined>(undefined);
-  const [isSyncing, setIsSyncing] = useState(false);
 
   // Filtreler & Modallar
   const [selectedSdgFilter, setSelectedSdgFilter] = useState<number | null>(null);
@@ -629,80 +627,6 @@ export function App() {
     showToast('Tüm kampüs tüketim ve atık verileri temizlendi.');
   };
 
-
-
-  // 7. Firebase'e Veri Eşitleme
-  const handleSyncSeedData = async () => {
-    setIsSyncing(true);
-    showToast('FMV Erenköy Işık zümreleri ve projeleri Cloud Firestore veritabanına aktarılıyor...');
-    
-    const result = await dbService.seedInitialData();
-    setIsSyncing(false);
-    showToast(result.message);
-
-    const { data: refreshedProjects } = await dbService.getProjects();
-    setProjects(refreshedProjects);
-
-    const refreshedCurr = await dbService.getCurriculums();
-    setCurriculums(refreshedCurr);
-
-    const refreshedMet = await dbService.getCampusMetrics();
-    setMetrics(refreshedMet);
-  };
-
-  // 8. Firebase'deki Deneme Verilerini Temizle (Yalnızca Profiller Korunur)
-  const handleClearTestData = async () => {
-    setIsSyncing(true);
-    showToast('Deneme projeleri, müfredat ve kampüs metrikleri temizleniyor...');
-    
-    const result = await dbService.clearTestData();
-    setIsSyncing(false);
-    showToast(result.message);
-
-    if (result.success) {
-      setProjects([]);
-      setCurriculums([]);
-      setMetrics([]);
-    }
-  };
-
-  // 9. Veritabanı Yedeği Geri Yükleme (JSON Restore)
-  const handleRestoreBackup = async (backupData: ParsedDatabaseBackup) => {
-    setIsSyncing(true);
-    showToast('Veritabanı yedeği Cloud Firestore ve yerel belleğe aktarılıyor...');
-    try {
-      const res = await dbService.restoreDatabaseBackup(backupData);
-      if (backupData.projects) setProjects(backupData.projects);
-      if (backupData.curriculums) setCurriculums(backupData.curriculums);
-      if (backupData.campusMetrics) setMetrics(backupData.campusMetrics);
-      if (backupData.academicYears && backupData.academicYears.length > 0) {
-        setAcademicYears(backupData.academicYears);
-        const activeYear = backupData.academicYears.find(y => y.isActive) || backupData.academicYears[0];
-        if (activeYear) setActiveAcademicYear(activeYear);
-      }
-      if (backupData.profiles && backupData.profiles.length > 0) {
-        setProfiles(backupData.profiles);
-      }
-      showToast(res.message);
-    } catch (err: any) {
-      showToast(`Geri yükleme hatası: ${err.message || 'Bilinmeyen hata'}`);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  // 9.1 Veritabanı Yedeği İndirme (JSON Export)
-  const handleExportBackup = () => {
-    exportDatabaseBackupJson({
-      projects,
-      curriculums,
-      campusMetrics: metrics,
-      profiles,
-      academicYears,
-    });
-    showToast('Veritabanı JSON yedeği başarıyla indirildi.');
-  };
-
   const handleOpenReportModal = (project: ProjectEvent) => {
     if (currentUser.role === 'teacher') {
       const isOwner = project.advisorId === currentUser.id || 
@@ -975,11 +899,6 @@ export function App() {
               onUpdateProfile={handleUpdateProfile}
               onDeleteProfile={handleDeleteProfile}
               currentUser={currentUser}
-              onExportBackup={handleExportBackup}
-              onRestoreBackup={handleRestoreBackup}
-              onSyncSeedData={handleSyncSeedData}
-              onClearTestData={handleClearTestData}
-              isSyncing={isSyncing}
             />
           )}
         </main>
