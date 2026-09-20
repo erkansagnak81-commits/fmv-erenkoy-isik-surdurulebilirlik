@@ -937,7 +937,7 @@ export function App() {
         />
 
         {/* Ana İçerik Alanı */}
-        <main className="flex-1 p-4 lg:p-6 space-y-6 min-w-0 overflow-x-hidden">
+        <main className="flex-1 p-3 sm:p-4 lg:p-6 space-y-6 min-w-0">
           {/* SEKME 1: BİREYSEL VEYA GENEL GÖSTERGE PANELİ */}
           {currentTab === 'dashboard' && (
             currentUser.role === 'teacher' || currentUser.role === 'dept_head' ? (

@@ -410,15 +410,17 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       {/* Kullanıcı Listesi Tablosu */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto scrollbar-thin">
-          <table className="w-full text-left border-collapse min-w-[820px]">
+          <table className="w-full text-left border-collapse min-w-[680px]">
             <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                <th className="py-3.5 px-3 sm:px-4">Personel</th>
-                <th className="py-3.5 px-3 sm:px-4">Kurumsal E-Posta</th>
-                <th className="py-3.5 px-3 sm:px-4">Rol / Yetki</th>
-                <th className="py-3.5 px-3 sm:px-4">Zümre / Bölüm</th>
-                <th className="py-3.5 px-3 sm:px-4">Unvan</th>
-                <th className="py-3.5 pr-5 sm:pr-6 pl-2 text-right w-24 shrink-0">İşlemler</th>
+              <tr className="bg-slate-50/90 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th className="py-3 px-2.5 sm:px-3">Personel</th>
+                <th className="py-3 px-2.5 sm:px-3">Kurumsal E-Posta</th>
+                <th className="py-3 px-2.5 sm:px-3">Rol / Yetki</th>
+                <th className="py-3 px-2.5 sm:px-3">Zümre / Bölüm</th>
+                <th className="py-3 px-2.5 sm:px-3">Unvan</th>
+                <th className="py-3 px-2 text-center w-20 shrink-0 sticky right-0 z-10 bg-slate-50/95 backdrop-blur-xs border-l border-slate-200 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)]">
+                  İşlemler
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
@@ -436,15 +438,15 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   const isSuperAdmin = isSuperAdminEmail(profile.email);
 
                   return (
-                    <tr key={profile.id} className="hover:bg-slate-50/70 transition-colors">
+                    <tr key={profile.id} className="group hover:bg-slate-50/70 transition-colors">
                       {/* İsim ve Avatar */}
-                      <td className="py-3.5 px-3 sm:px-4">
-                        <div className="flex items-center gap-3">
+                      <td className="py-2.5 px-2.5 sm:px-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(profile)}
                             title="Fotoğrafı ve Bilgileri Düzenle"
-                            className="relative group w-9 h-9 rounded-full bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center font-bold text-slate-700 shadow-xs hover:ring-2 hover:ring-emerald-500 transition-all cursor-pointer"
+                            className="relative group w-8 h-8 rounded-full bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center font-bold text-slate-700 text-xs shadow-2xs hover:ring-2 hover:ring-emerald-500 transition-all cursor-pointer"
                           >
                             {profile.avatar ? (
                               <img src={profile.avatar} alt={profile.name} className="w-full h-full object-cover" />
@@ -452,31 +454,32 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                               profile.name.charAt(0)
                             )}
                             <div className="absolute inset-0 bg-slate-900/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <Camera className="w-3.5 h-3.5" />
+                              <Camera className="w-3 h-3" />
                             </div>
                           </button>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <button
                                 type="button"
                                 onClick={() => handleOpenEditModal(profile)}
-                                className="font-bold text-slate-900 hover:text-emerald-700 transition-colors text-left cursor-pointer"
+                                className="font-bold text-slate-900 hover:text-emerald-700 transition-colors text-left truncate max-w-[130px] sm:max-w-[160px] cursor-pointer"
+                                title={profile.name}
                               >
                                 {profile.name}
                               </button>
                               {isSuperAdmin && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 shrink-0">
-                                  Ana Yönetici
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-emerald-100 text-emerald-800 shrink-0">
+                                  Yönetici
                                 </span>
                               )}
                               {!isSuperAdmin && isCurrent && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-700 shrink-0">
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-slate-100 text-slate-700 shrink-0">
                                   Siz
                                 </span>
                               )}
                               {hasUserActionPermission(profile, 'canEditCampusMetrics', rolePermissions) && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200 shrink-0" title="Yeşil Kampüs Metriklerini Güncelleme Yetkisi Var">
-                                  🌱 Yeşil Kampüs
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-teal-50 text-teal-700 border border-teal-200 shrink-0" title="Yeşil Kampüs Metriklerini Güncelleme Yetkisi Var">
+                                  🌱
                                 </span>
                               )}
                             </div>
@@ -485,86 +488,88 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                       </td>
 
                       {/* E-posta */}
-                      <td className="py-3.5 px-3 sm:px-4">
-                        <div className="font-mono text-xs text-slate-700 truncate max-w-[190px] sm:max-w-[210px]" title={profile.email}>
+                      <td className="py-2.5 px-2.5 sm:px-3">
+                        <div className="font-mono text-xs text-slate-600 truncate max-w-[140px] sm:max-w-[170px]" title={profile.email}>
                           {profile.email}
                         </div>
                       </td>
 
                       {/* Rol */}
-                      <td className="py-3.5 px-3 sm:px-4 whitespace-nowrap">
+                      <td className="py-2.5 px-2.5 sm:px-3 whitespace-nowrap">
                         {profile.role === 'principal' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-100 text-purple-900 border border-purple-200 shadow-2xs">
-                            <School className="w-3 h-3 text-purple-700" />
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-purple-100 text-purple-900 border border-purple-200">
+                            <School className="w-3 h-3 text-purple-700 shrink-0" />
                             Okul Müdürü
                           </span>
                         ) : profile.role === 'coordinator' || profile.role === 'admin' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            <Sparkles className="w-3 h-3 text-emerald-600" />
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <Sparkles className="w-3 h-3 text-emerald-600 shrink-0" />
                             Koordinatör
                           </span>
                         ) : profile.role === 'dept_head' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                            <Building2 className="w-3 h-3 text-blue-600" />
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                            <Building2 className="w-3 h-3 text-blue-600 shrink-0" />
                             Bölüm Başkanı
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                            <GraduationCap className="w-3 h-3 text-amber-600" />
-                            Danışman Öğretmen
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            <GraduationCap className="w-3 h-3 text-amber-600 shrink-0" />
+                            Öğretmen
                           </span>
                         )}
                       </td>
 
                       {/* Zümre */}
-                      <td className="py-3.5 px-3 sm:px-4 whitespace-nowrap">
+                      <td className="py-2.5 px-2.5 sm:px-3 whitespace-nowrap">
                         {profile.role === 'principal' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold text-purple-900 bg-purple-50 border border-purple-200">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold text-purple-900 bg-purple-50 border border-purple-200">
                             Okul Yönetimi
                           </span>
                         ) : profile.role === 'coordinator' || profile.role === 'admin' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200">
                             Okul Geneli
                           </span>
                         ) : dept ? (
                           <span 
-                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium text-slate-700 bg-slate-100 border border-slate-200 max-w-[150px] truncate"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-700 bg-slate-100 border border-slate-200 max-w-[130px] truncate"
                             style={{ borderLeftColor: dept.color, borderLeftWidth: '3px' }}
                             title={dept.name}
                           >
                             <span className="truncate">{dept.name}</span>
                           </span>
                         ) : (
-                          <span className="text-slate-400">-</span>
+                          <span className="text-slate-400 text-xs">-</span>
                         )}
                       </td>
 
                       {/* Unvan */}
-                      <td className="py-3.5 px-3 sm:px-4 text-xs text-slate-600 font-medium">
-                        <div className="max-w-[150px] sm:max-w-[170px] truncate" title={profile.title || '-'}>
+                      <td className="py-2.5 px-2.5 sm:px-3 text-xs text-slate-600 font-medium">
+                        <div className="max-w-[120px] sm:max-w-[140px] truncate" title={profile.title || '-'}>
                           {profile.title || '-'}
                         </div>
                       </td>
 
-                      {/* İşlemler */}
-                      <td className="py-3.5 pr-5 sm:pr-6 pl-2 text-right whitespace-nowrap w-24 shrink-0">
-                        <div className="flex items-center justify-end gap-1 shrink-0">
+                      {/* İşlemler - Sabit (Sticky Right) */}
+                      <td className="py-2.5 px-2 text-center whitespace-nowrap w-20 shrink-0 sticky right-0 z-10 bg-white group-hover:bg-slate-50 border-l border-slate-100 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)]">
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => handleOpenEditModal(profile)}
-                            title="Rol ve Bilgileri Düzenle"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                            title="Düzenle"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer"
                           >
-                            <Edit2 className="w-4 h-4" />
+                            <Edit2 className="w-3.5 h-3.5" />
                           </button>
 
-                          {!isCurrent && !isSuperAdmin && (
+                          {!isCurrent && !isSuperAdmin ? (
                             <button
                               onClick={() => setDeletingId(profile.id)}
-                              title="Kullanıcıyı Sil"
+                              title="Sil"
                               className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
+                          ) : (
+                            <span className="w-7 h-7 inline-block" />
                           )}
                         </div>
                       </td>
