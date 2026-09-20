@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { UserProfile, UserRole } from '../../types';
+import { UserProfile, UserRole, SystemRolePermissions } from '../../types';
 import { DEPARTMENTS, isSuperAdminEmail } from '../../constants';
+import { hasUserActionPermission } from '../../constants/permissions';
+import { RolePermissionControlPanel } from './RolePermissionControlPanel';
 import { 
   Users, 
   UserPlus, 
@@ -16,7 +18,9 @@ import {
   AlertCircle,
   Camera,
   Upload,
-  Link2
+  Link2,
+  Sliders,
+  School
 } from 'lucide-react';
 import { processImageFile } from '../../lib/imageUtils';
 
@@ -26,6 +30,9 @@ interface UserManagementViewProps {
   onUpdateProfile: (id: string, updates: Partial<UserProfile>) => Promise<void>;
   onDeleteProfile: (id: string) => Promise<void>;
   currentUser: UserProfile;
+  rolePermissions: SystemRolePermissions;
+  onSaveRolePermissions: (updated: SystemRolePermissions) => Promise<void>;
+  onResetRolePermissions: () => Promise<void>;
 }
 
 export const UserManagementView: React.FC<UserManagementViewProps> = ({
@@ -34,7 +41,12 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   onUpdateProfile,
   onDeleteProfile,
   currentUser,
+  rolePermissions,
+  onSaveRolePermissions,
+  onResetRolePermissions,
 }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'users' | 'permissions'>('users');
+  const isSuperAdmin = isSuperAdminEmail(currentUser.email) || currentUser.role === 'admin';
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [deptFilter, setDeptFilter] = useState<string>('all');
@@ -53,6 +65,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   const [isUrlInputOpen, setIsUrlInputOpen] = useState(false);
   const [customAvatarUrl, setCustomAvatarUrl] = useState('');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [formCanEditCampus, setFormCanEditCampus] = useState(false);
+  const [formCanResetCampus, setFormCanResetCampus] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -71,6 +85,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     setFormAvatar('');
     setIsUrlInputOpen(false);
     setCustomAvatarUrl('');
+    setFormCanEditCampus(false);
+    setFormCanResetCampus(false);
     setFormError(null);
     setIsModalOpen(true);
   };
@@ -81,11 +97,13 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     setFormName(profile.name);
     setFormEmail(profile.email);
     setFormRole(profile.role);
-    setFormDeptId(profile.role === 'coordinator' || profile.role === 'admin' ? '' : (profile.departmentId || ''));
+    setFormDeptId(profile.role === 'coordinator' || profile.role === 'admin' || profile.role === 'principal' ? '' : (profile.departmentId || ''));
     setFormTitle(profile.title);
     setFormAvatar(profile.avatar || '');
     setIsUrlInputOpen(false);
     setCustomAvatarUrl('');
+    setFormCanEditCampus(Boolean(profile.customPermissions?.canEditCampusMetrics));
+    setFormCanResetCampus(Boolean(profile.customPermissions?.canResetCampusMetrics));
     setFormError(null);
     setIsModalOpen(true);
   };
@@ -142,14 +160,21 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
     setIsSubmitting(true);
     try {
+      const customPermissions = {
+        ...(editingProfile?.customPermissions || {}),
+        canEditCampusMetrics: formCanEditCampus,
+        canResetCampusMetrics: formCanResetCampus,
+      };
+
       if (editingProfile) {
         await onUpdateProfile(editingProfile.id, {
           name: formName.trim(),
           email,
           role: formRole,
-          departmentId: (formRole === 'coordinator' || formRole === 'admin') ? '' : formDeptId,
-          title: formTitle.trim() || (formRole === 'dept_head' ? 'Bölüm Başkanı' : 'Danışman Öğretmen'),
+          departmentId: (formRole === 'coordinator' || formRole === 'admin' || formRole === 'principal') ? '' : formDeptId,
+          title: formTitle.trim() || (formRole === 'principal' ? 'Okul Müdürü' : formRole === 'dept_head' ? 'Bölüm Başkanı' : 'Danışman Öğretmen'),
           avatar: formAvatar.trim() || '',
+          customPermissions,
         });
       } else {
         // E-posta mükerrer kontrolü
@@ -164,10 +189,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           name: formName.trim(),
           email,
           role: formRole,
-          departmentId: (formRole === 'coordinator' || formRole === 'admin') ? '' : formDeptId,
-          title: formTitle.trim() || (formRole === 'dept_head' ? 'Bölüm Başkanı' : 'Danışman Öğretmen'),
+          departmentId: (formRole === 'coordinator' || formRole === 'admin' || formRole === 'principal') ? '' : formDeptId,
+          title: formTitle.trim() || (formRole === 'principal' ? 'Okul Müdürü' : formRole === 'dept_head' ? 'Bölüm Başkanı' : 'Danışman Öğretmen'),
           avatar: formAvatar.trim() || '',
           status: 'active',
+          customPermissions,
         });
       }
 
@@ -205,6 +231,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
   // İstatistikler
   const totalCount = profiles.length;
+  const principalCount = profiles.filter(p => p.role === 'principal').length;
   const coordinatorCount = profiles.filter(p => p.role === 'coordinator' || p.role === 'admin').length;
   const deptHeadCount = profiles.filter(p => p.role === 'dept_head').length;
   const teacherCount = profiles.filter(p => p.role === 'teacher').length;
@@ -229,17 +256,60 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           </div>
         </div>
 
+        {activeSubTab === 'users' && (
+          <button
+            onClick={handleOpenAddModal}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm shadow-md shadow-emerald-600/20 transition-all shrink-0 cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Yeni Kullanıcı Tanımla</span>
+          </button>
+        )}
+      </div>
+
+      {/* Alt Sekmeler: Personel Listesi vs Rol & Yetki Kontrol Paneli */}
+      <div className="flex items-center gap-2 p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80 w-fit">
         <button
-          onClick={handleOpenAddModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm shadow-md shadow-emerald-600/20 transition-all shrink-0"
+          type="button"
+          onClick={() => setActiveSubTab('users')}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeSubTab === 'users'
+              ? 'bg-white text-emerald-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+          }`}
         >
-          <UserPlus className="w-4 h-4" />
-          <span>Yeni Kullanıcı Tanımla</span>
+          <Users className="w-4 h-4 text-emerald-700" />
+          <span>Personel Listesi ({totalCount})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('permissions')}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeSubTab === 'permissions'
+              ? 'bg-white text-emerald-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+          }`}
+        >
+          <Sliders className="w-4 h-4 text-emerald-700" />
+          <span>Rol &amp; Yetki Kontrol Paneli</span>
         </button>
       </div>
 
+      {activeSubTab === 'permissions' ? (
+        <RolePermissionControlPanel
+          permissions={rolePermissions}
+          onSavePermissions={onSaveRolePermissions}
+          onResetToDefault={onResetRolePermissions}
+          currentUserRole={currentUser.role}
+          isSuperAdmin={isSuperAdmin}
+          profiles={profiles}
+        />
+      ) : (
+        <>
+
       {/* İstatistik Özet Kartları */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
             <Users className="w-5 h-5" />
@@ -247,6 +317,16 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           <div>
             <p className="text-xs text-slate-500 font-medium">Toplam Personel</p>
             <p className="text-xl font-black text-slate-900">{totalCount}</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0">
+            <School className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 font-medium">Okul Müdürü</p>
+            <p className="text-xl font-black text-purple-900">{principalCount}</p>
           </div>
         </div>
 
@@ -304,9 +384,10 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-500 font-medium"
+            className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-500 font-medium cursor-pointer"
           >
             <option value="all">Tüm Roller</option>
+            <option value="principal">Okul Müdürü</option>
             <option value="coordinator">Koordinatörler</option>
             <option value="dept_head">Bölüm Başkanları</option>
             <option value="teacher">Danışman Öğretmenler</option>
@@ -316,7 +397,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           <select
             value={deptFilter}
             onChange={(e) => setDeptFilter(e.target.value)}
-            className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-500 font-medium"
+            className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-500 font-medium cursor-pointer"
           >
             <option value="all">Tüm Zümreler</option>
             {DEPARTMENTS.map(d => (
@@ -328,16 +409,16 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
       {/* Kullanıcı Listesi Tablosu */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full text-left border-collapse min-w-[820px]">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                <th className="py-3.5 px-4">Personel</th>
-                <th className="py-3.5 px-4">Kurumsal E-Posta</th>
-                <th className="py-3.5 px-4">Rol / Yetki</th>
-                <th className="py-3.5 px-4">Zümre / Bölüm</th>
-                <th className="py-3.5 px-4">Unvan</th>
-                <th className="py-3.5 px-4 text-right">İşlemler</th>
+                <th className="py-3.5 px-3 sm:px-4">Personel</th>
+                <th className="py-3.5 px-3 sm:px-4">Kurumsal E-Posta</th>
+                <th className="py-3.5 px-3 sm:px-4">Rol / Yetki</th>
+                <th className="py-3.5 px-3 sm:px-4">Zümre / Bölüm</th>
+                <th className="py-3.5 px-3 sm:px-4">Unvan</th>
+                <th className="py-3.5 pr-5 sm:pr-6 pl-2 text-right w-24 shrink-0">İşlemler</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
@@ -357,13 +438,13 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   return (
                     <tr key={profile.id} className="hover:bg-slate-50/70 transition-colors">
                       {/* İsim ve Avatar */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-3 sm:px-4">
                         <div className="flex items-center gap-3">
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(profile)}
                             title="Fotoğrafı ve Bilgileri Düzenle"
-                            className="relative group w-10 h-10 rounded-full bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center font-bold text-slate-700 shadow-xs hover:ring-2 hover:ring-emerald-500 transition-all cursor-pointer"
+                            className="relative group w-9 h-9 rounded-full bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center font-bold text-slate-700 shadow-xs hover:ring-2 hover:ring-emerald-500 transition-all cursor-pointer"
                           >
                             {profile.avatar ? (
                               <img src={profile.avatar} alt={profile.name} className="w-full h-full object-cover" />
@@ -371,11 +452,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                               profile.name.charAt(0)
                             )}
                             <div className="absolute inset-0 bg-slate-900/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <Camera className="w-4 h-4" />
+                              <Camera className="w-3.5 h-3.5" />
                             </div>
                           </button>
-                          <div>
-                            <div className="flex items-center gap-1.5">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <button
                                 type="button"
                                 onClick={() => handleOpenEditModal(profile)}
@@ -384,13 +465,18 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                                 {profile.name}
                               </button>
                               {isSuperAdmin && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 shrink-0">
                                   Ana Yönetici
                                 </span>
                               )}
                               {!isSuperAdmin && isCurrent && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-700">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-700 shrink-0">
                                   Siz
+                                </span>
+                              )}
+                              {hasUserActionPermission(profile, 'canEditCampusMetrics', rolePermissions) && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200 shrink-0" title="Yeşil Kampüs Metriklerini Güncelleme Yetkisi Var">
+                                  🌱 Yeşil Kampüs
                                 </span>
                               )}
                             </div>
@@ -399,13 +485,20 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                       </td>
 
                       {/* E-posta */}
-                      <td className="py-3.5 px-4 font-mono text-xs text-slate-700">
-                        {profile.email}
+                      <td className="py-3.5 px-3 sm:px-4">
+                        <div className="font-mono text-xs text-slate-700 truncate max-w-[190px] sm:max-w-[210px]" title={profile.email}>
+                          {profile.email}
+                        </div>
                       </td>
 
                       {/* Rol */}
-                      <td className="py-3.5 px-4">
-                        {profile.role === 'coordinator' || profile.role === 'admin' ? (
+                      <td className="py-3.5 px-3 sm:px-4 whitespace-nowrap">
+                        {profile.role === 'principal' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-100 text-purple-900 border border-purple-200 shadow-2xs">
+                            <School className="w-3 h-3 text-purple-700" />
+                            Okul Müdürü
+                          </span>
+                        ) : profile.role === 'coordinator' || profile.role === 'admin' ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                             <Sparkles className="w-3 h-3 text-emerald-600" />
                             Koordinatör
@@ -424,17 +517,22 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                       </td>
 
                       {/* Zümre */}
-                      <td className="py-3.5 px-4">
-                        {profile.role === 'coordinator' || profile.role === 'admin' ? (
+                      <td className="py-3.5 px-3 sm:px-4 whitespace-nowrap">
+                        {profile.role === 'principal' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold text-purple-900 bg-purple-50 border border-purple-200">
+                            Okul Yönetimi
+                          </span>
+                        ) : profile.role === 'coordinator' || profile.role === 'admin' ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200">
                             Okul Geneli
                           </span>
                         ) : dept ? (
                           <span 
-                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium text-slate-700 bg-slate-100 border border-slate-200"
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium text-slate-700 bg-slate-100 border border-slate-200 max-w-[150px] truncate"
                             style={{ borderLeftColor: dept.color, borderLeftWidth: '3px' }}
+                            title={dept.name}
                           >
-                            <span>{dept.name}</span>
+                            <span className="truncate">{dept.name}</span>
                           </span>
                         ) : (
                           <span className="text-slate-400">-</span>
@@ -442,17 +540,19 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                       </td>
 
                       {/* Unvan */}
-                      <td className="py-3.5 px-4 text-xs text-slate-600 font-medium">
-                        {profile.title || '-'}
+                      <td className="py-3.5 px-3 sm:px-4 text-xs text-slate-600 font-medium">
+                        <div className="max-w-[150px] sm:max-w-[170px] truncate" title={profile.title || '-'}>
+                          {profile.title || '-'}
+                        </div>
                       </td>
 
                       {/* İşlemler */}
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="py-3.5 pr-5 sm:pr-6 pl-2 text-right whitespace-nowrap w-24 shrink-0">
+                        <div className="flex items-center justify-end gap-1 shrink-0">
                           <button
                             onClick={() => handleOpenEditModal(profile)}
                             title="Rol ve Bilgileri Düzenle"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-slate-100 transition-colors cursor-pointer"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
@@ -461,7 +561,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                             <button
                               onClick={() => setDeletingId(profile.id)}
                               title="Kullanıcıyı Sil"
-                              className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors"
+                              className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -476,30 +576,47 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           </table>
         </div>
       </div>
+      </>
+      )}
 
       {/* Kullanıcı Ekleme / Düzenleme Modalı */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsModalOpen(false);
+          }}
+        >
+          <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] my-auto animate-in fade-in zoom-in-95 duration-150">
             
-            <div className="p-5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+            {/* Sabit Modal Başlığı */}
+            <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold shrink-0">
                   {editingProfile ? <Edit2 className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
                 </div>
-                <h3 className="font-bold text-slate-900 text-base">
-                  {editingProfile ? 'Personel & Rol Düzenle' : 'Yeni Personel Tanımla'}
-                </h3>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base leading-tight">
+                    {editingProfile ? 'Personel & Rol Düzenle' : 'Yeni Personel Tanımla'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {editingProfile ? `${editingProfile.name} profil detayları` : 'Sisteme yeni bir kullanıcı ekleyin'}
+                  </p>
+                </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitForm} className="p-5 space-y-4">
+            {/* Form ve Butonlar (Sabit alt bar ile) */}
+            <form onSubmit={handleSubmitForm} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {/* Kaydırılabilir Form Gövdesi */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
               {formError && (
                 <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
@@ -649,7 +766,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   onChange={(e) => {
                     const newRole = e.target.value as UserRole;
                     setFormRole(newRole);
-                    if (newRole === 'coordinator' || newRole === 'admin') {
+                    if (newRole === 'coordinator' || newRole === 'admin' || newRole === 'principal') {
                       setFormDeptId('');
                     } else if (!formDeptId) {
                       setFormDeptId(DEPARTMENTS[0].id);
@@ -660,11 +777,22 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   <option value="teacher">Danışman Öğretmen</option>
                   <option value="dept_head">Bölüm Başkanı</option>
                   <option value="coordinator">Koordinatör</option>
+                  <option value="principal">Okul Müdürü</option>
                 </select>
               </div>
 
-              {/* Zümre / Bölüm (Koordinatör hariç) */}
-              {formRole === 'coordinator' || formRole === 'admin' ? (
+              {/* Zümre / Bölüm (Koordinatör ve Okul Müdürü hariç) */}
+              {formRole === 'principal' ? (
+                <div className="p-3.5 rounded-xl bg-purple-50/80 border border-purple-200 text-xs text-purple-900 flex items-start gap-2.5">
+                  <School className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-purple-950">Yetki Kapsamı: Okul Yönetimi</span>
+                    <span className="text-[11px] text-purple-800 leading-relaxed">
+                      Okul Müdürlüğü tüm okul yönetimini ve akademik kadroyu temsil ettiği için tekil bir zümre seçimi gerekmemektedir.
+                    </span>
+                  </div>
+                </div>
+              ) : formRole === 'coordinator' || formRole === 'admin' ? (
                 <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-900 flex items-start gap-2.5">
                   <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                   <div>
@@ -705,18 +833,52 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 />
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2.5">
+              {/* Özel İzinler & Ek Sorumluluklar */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                  <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Kişiye Özel Ek Yetkiler (Yeşil Kampüs &amp; Metrikler)</span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Bu personele genel rolünden bağımsız olarak Yeşil Kampüs verisi girme veya sıfırlama yetkisi verebilirsiniz.
+                </p>
+                <div className="space-y-2 pt-1">
+                  <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={formCanEditCampus}
+                      onChange={(e) => setFormCanEditCampus(e.target.checked)}
+                      className="rounded text-teal-600 focus:ring-teal-500 w-4 h-4"
+                    />
+                    <span className="font-semibold text-slate-800">🌱 Metrik Değerlerini Ekleme ve Güncelleme Yetkisi</span>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={formCanResetCampus}
+                      onChange={(e) => setFormCanResetCampus(e.target.checked)}
+                      className="rounded text-teal-600 focus:ring-teal-500 w-4 h-4"
+                    />
+                    <span className="font-semibold text-slate-800">⚠️ Tüm Kampüs Metriklerini Sıfırlama Yetkisi</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+              {/* Sabit Alt Buton Barı */}
+              <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200/60 transition-colors cursor-pointer"
                 >
                   Vazgeç
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 transition-all disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 transition-all shadow-xs disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmitting ? 'Kaydediliyor...' : editingProfile ? 'Güncelle' : 'Kullanıcıyı Ekle'}
                 </button>

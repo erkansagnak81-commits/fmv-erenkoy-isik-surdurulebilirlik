@@ -1,4 +1,4 @@
-import { ProjectEvent, CurriculumIntegration, CampusMetric, Department, AcademicYear } from '../types';
+import { ProjectEvent, CurriculumIntegration, CampusMetric, Department, AcademicYear, ActivityLog } from '../types';
 
 /**
  * Tarayıcı üzerinden dosya indirmeyi tetikler
@@ -285,4 +285,80 @@ export function parseDatabaseBackupJson(jsonString: string): {
     };
   }
 }
+
+/**
+ * 6. Aktivite ve Güvenlik Loglarını CSV (Excel uyumlu) Olarak Dışa Aktarır
+ */
+export function exportLogsToCsv(logs: ActivityLog[], departments: Department[] = []) {
+  const deptMap = new Map(departments.map(d => [d.id, d.name]));
+
+  const headers = [
+    'Tarih & Saat',
+    'Kullanıcı Adı',
+    'E-Posta',
+    'Rol',
+    'Zümre / Bölüm',
+    'Kategori',
+    'İşlem Türü',
+    'Açıklama',
+    'Oturum Süresi (Saniye)',
+    'Oturum Süresi (Okunabilir)'
+  ];
+
+  const roleLabels: Record<string, string> = {
+    teacher: 'Danışman Öğretmen',
+    dept_head: 'Bölüm Başkanı',
+    coordinator: 'Koordinatör',
+    admin: 'Sistem Yöneticisi',
+    principal: 'Okul Müdürü',
+  };
+
+  const categoryLabels: Record<string, string> = {
+    auth: 'Oturum & Giriş',
+    project: 'Proje & Etkinlik',
+    curriculum: 'Müfredat & SKA',
+    metrics: 'Yeşil Kampüs',
+    system: 'Sistem & Yönetim',
+  };
+
+  const rows = logs.map(log => {
+    const deptName = log.departmentId ? (deptMap.get(log.departmentId) || log.departmentId) : '—';
+    const role = roleLabels[log.userRole] || log.userRole;
+    const cat = categoryLabels[log.category] || log.category;
+    
+    let durationReadable = '—';
+    if (log.sessionDurationSeconds !== undefined && log.sessionDurationSeconds > 0) {
+      const mins = Math.floor(log.sessionDurationSeconds / 60);
+      const secs = log.sessionDurationSeconds % 60;
+      durationReadable = `${mins} dk ${secs} sn`;
+    }
+
+    const formattedDate = new Date(log.timestamp).toLocaleString('tr-TR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+
+    return [
+      escapeCsv(formattedDate),
+      escapeCsv(log.userName),
+      escapeCsv(log.userEmail),
+      escapeCsv(role),
+      escapeCsv(deptName),
+      escapeCsv(cat),
+      escapeCsv(log.actionType),
+      escapeCsv(log.description),
+      escapeCsv(log.sessionDurationSeconds ?? ''),
+      escapeCsv(durationReadable)
+    ].join(';');
+  });
+
+  const csvContent = '\uFEFF' + [headers.join(';'), ...rows].join('\r\n');
+  const timestamp = new Date().toISOString().slice(0, 10);
+  downloadFile(`FMV_Erenkoy_Aktivite_Loglari_${timestamp}.csv`, csvContent, 'text/csv;charset=utf-8;');
+}
+
 

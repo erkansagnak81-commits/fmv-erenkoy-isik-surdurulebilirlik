@@ -1,4 +1,4 @@
-export type UserRole = 'teacher' | 'dept_head' | 'coordinator' | 'admin';
+export type UserRole = 'teacher' | 'dept_head' | 'coordinator' | 'principal' | 'admin';
 
 export type ProjectStatus = 
   | 'draft' 
@@ -26,6 +26,7 @@ export interface UserProfile {
   avatar?: string;
   createdAt?: string;
   status?: 'active' | 'pending';
+  customPermissions?: Partial<RoleActionPermissions>;
 }
 
 export interface SdgGoal {
@@ -135,4 +136,101 @@ export interface AcademicYear {
   totalStudents?: number; // Koordinatör tarafından girilen okul öğrenci mevcudu
   description?: string;
 }
+
+// Uygulama Menü Sekmeleri
+export type AppTab = 
+  | 'dashboard' 
+  | 'calendar' 
+  | 'projects' 
+  | 'approvals' 
+  | 'curriculum' 
+  | 'campus' 
+  | 'reports' 
+  | 'users'
+  | 'logs';
+
+// Sistem ve Kullanıcı Aktivite Günlüğü (Audit Trail)
+export type LogCategory = 'auth' | 'project' | 'projects' | 'curriculum' | 'metrics' | 'system';
+
+export interface ActivityLog {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userRole: UserRole;
+  departmentId?: string;
+  actionType: 
+    | 'login' 
+    | 'logout' 
+    | 'heartbeat' 
+    | 'session_end'
+    | 'create_project' 
+    | 'submit_project'
+    | 'update_project' 
+    | 'approve_project'
+    | 'delete_project' 
+    | 'submit_impact_report' 
+    | 'create_curriculum' 
+    | 'update_curriculum' 
+    | 'delete_curriculum' 
+    | 'create_metric' 
+    | 'update_metric' 
+    | 'delete_metric' 
+    | 'clear_metrics'
+    | 'create_user' 
+    | 'update_user' 
+    | 'delete_user' 
+    | 'update_permissions'
+    | 'update_academic_year'
+    | 'change_active_year'
+    | 'clear_logs'
+    | 'system_action'
+    | string;
+  category: LogCategory;
+  description: string;
+  details?: Record<string, any>;
+  timestamp: string; // ISO 8601
+  sessionDurationSeconds?: number; // Oturum süresi
+}
+
+// Eylem ve İşlem Düzeyi Yetkiler
+export interface RoleActionPermissions {
+  // Proje & Faaliyetler
+  canCreateProject: boolean;
+  canEditOwnProject: boolean;
+  canEditDeptProject: boolean;
+  canEditAllProjects: boolean;
+  canDeleteProject: boolean;
+  canApproveDept: boolean;
+  canApproveCoordinator: boolean;
+  canSubmitReport: boolean;
+  canExportProjects: boolean;
+
+  // Müfredat & SKA
+  canCreateCurriculum: boolean;
+  canEditOwnCurriculum: boolean;
+  canEditAllCurriculum: boolean;
+  canExportCurriculum: boolean;
+
+  // Yeşil Kampüs Metrikleri
+  canEditCampusMetrics: boolean;
+  canResetCampusMetrics: boolean;
+
+  // Sistem & Yönetim
+  canManageUsers: boolean;
+  canManageAcademicYears: boolean;
+}
+
+// Rol Bazlı Yetki Yapılandırması
+export interface RolePermissionConfig {
+  role: UserRole;
+  roleName: string;
+  description: string;
+  allowedTabs: AppTab[];
+  permissions: RoleActionPermissions;
+  assignedUsers?: Partial<Record<keyof RoleActionPermissions, string[]>>;
+}
+
+// Tüm Roller İçin Yetki Matrisi
+export type SystemRolePermissions = Record<UserRole, RolePermissionConfig>;
 

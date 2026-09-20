@@ -92,9 +92,15 @@ export function parseTargetGrades(targetGrades: string[] = []): ParsedTargetGrad
   return result;
 }
 
+export const SUPER_ADMIN_EMAILS = [
+  'erkan.sagnak@fmvisik.k12.tr',
+  'erkansagnak81@gmail.com'
+];
 export const SUPER_ADMIN_EMAIL = 'erkan.sagnak@fmvisik.k12.tr';
 export const isSuperAdminEmail = (email?: string | null): boolean => {
-  return Boolean(email && email.trim().toLowerCase() === SUPER_ADMIN_EMAIL);
+  if (!email) return false;
+  const normalized = email.trim().toLowerCase();
+  return SUPER_ADMIN_EMAILS.includes(normalized);
 };
 
 export const GOOGLE_DRIVE_ARCHIVE_CONFIG = {

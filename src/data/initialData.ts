@@ -12,6 +12,17 @@ export const INITIAL_PROFILES: UserProfile[] = [
     status: 'active',
   },
   {
+    id: 'user-principal-isik',
+    name: 'Okul Müdürü',
+    email: 'okul.muduru@fmvisik.k12.tr',
+    role: 'principal',
+    departmentId: '',
+    title: 'Okul Müdürü',
+    avatar: '/logo.png',
+    createdAt: '2026-01-05T08:00:00.000Z',
+    status: 'active',
+  },
+  {
     id: 'user-head-servet',
     name: 'Servet Battal',
     email: 'servet.battal@fmvisik.k12.tr',
@@ -114,8 +125,9 @@ export const INITIAL_PROFILES: UserProfile[] = [
 
 export const DEFAULT_SIMULATION_USERS: Record<string, UserProfile> = {
   coordinator: INITIAL_PROFILES[0],
-  dept_head: INITIAL_PROFILES[1],
-  teacher: INITIAL_PROFILES[8],
+  principal: INITIAL_PROFILES[1],
+  dept_head: INITIAL_PROFILES[2],
+  teacher: INITIAL_PROFILES[9],
   admin: INITIAL_PROFILES[0],
 };
 

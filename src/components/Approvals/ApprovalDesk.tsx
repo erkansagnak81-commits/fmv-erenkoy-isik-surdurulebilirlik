@@ -41,7 +41,7 @@ export const ApprovalDesk: React.FC<ApprovalDeskProps> = ({
   // Kullanıcı Bölüm Başkanı ise kendi zümresinin 'submitted' (inceleme bekleyen) projelerini görür.
   // Koordinatör ise Bölüm Başkanı onayından geçmiş 'dept_approved' projeleri ve tüm bekleyenleri görebilir.
   const isDeptHead = currentUser.role === 'dept_head';
-  const isCoordinator = currentUser.role === 'coordinator';
+  const isCoordinator = currentUser.role === 'coordinator' || currentUser.role === 'principal' || currentUser.role === 'admin';
 
   const pendingProjects = projects.filter(p => {
     if (isDeptHead) {

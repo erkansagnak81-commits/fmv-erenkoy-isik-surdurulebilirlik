@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserProfile, UserRole, Department, AcademicYear } from '../../types';
 import { DEPARTMENTS, isSuperAdminEmail } from '../../constants';
-import { Sparkles, UserCheck, LogOut, Camera, GraduationCap } from 'lucide-react';
+import { Sparkles, UserCheck, LogOut, Camera, GraduationCap, Download, WifiOff, School } from 'lucide-react';
 import { ProfileModal } from '../Auth/ProfileModal';
 import { AcademicYearModal } from '../Admin/AcademicYearModal';
 
@@ -21,6 +21,9 @@ interface HeaderProps {
   onSaveAcademicYear?: (year: AcademicYear) => Promise<void>;
   onSetActiveAcademicYear?: (yearId: string) => Promise<void>;
   hasLiveUpdate?: boolean;
+  isOnline?: boolean;
+  isPwaInstallable?: boolean;
+  onPromptInstall?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -39,6 +42,9 @@ export const Header: React.FC<HeaderProps> = ({
   onSaveAcademicYear,
   onSetActiveAcademicYear,
   hasLiveUpdate = false,
+  isOnline = true,
+  isPwaInstallable = false,
+  onPromptInstall,
 }) => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAcademicYearModalOpen, setIsAcademicYearModalOpen] = useState(false);
@@ -50,11 +56,13 @@ export const Header: React.FC<HeaderProps> = ({
 
   // Seçilen kişinin kimliğini göster (Simülasyon modunda o kişinin sayfası ve bilgisi gösterilir)
   const displayUser = isSimulating ? currentUser : realUser;
-  const canManageAcademicYear = currentUser.role === 'coordinator' || isSuperAdmin;
+  const canManageAcademicYear = isSimulating
+    ? (currentUser.role === 'coordinator' || currentUser.role === 'admin' || currentUser.role === 'principal')
+    : (currentUser.role === 'coordinator' || currentUser.role === 'principal' || isSuperAdmin);
 
   return (
-    <header className="no-print sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 lg:px-8 py-3 transition-all shadow-xs">
-      <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <header className="no-print sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 lg:px-6 py-3 transition-all shadow-xs">
+      <div className="max-w-[1440px] px-2 sm:px-4 lg:px-6 mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         {/* Sol: Okul Adı, Portal Başlığı ve Canlı Eşitleme Durumu */}
         <div>
           <div className="flex items-center flex-wrap gap-2">
@@ -63,20 +71,30 @@ export const Header: React.FC<HeaderProps> = ({
             </h1>
             
             {/* Canlı Firestore Eşitleme Göstergesi (Kullanıcı etkileşimi gerektirmeyen otomatik bildirim) */}
-            <div 
-              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-all duration-300 ${
-                hasLiveUpdate 
-                  ? 'bg-amber-100 text-amber-900 border-amber-300 ring-2 ring-amber-400/40 animate-pulse' 
-                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              }`}
-              title={hasLiveUpdate ? 'Yeni bir değişiklik algılandı ve anında yansıtıldı.' : 'Cloud Firestore ile canlı ve otomatik olarak senkronize durumdasınız.'}
-            >
-              <span className="relative flex h-1.5 w-1.5">
-                <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${hasLiveUpdate ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-ping'}`}></span>
-                <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${hasLiveUpdate ? 'bg-amber-600' : 'bg-emerald-600'}`}></span>
-              </span>
-              <span>{hasLiveUpdate ? 'Veriler Güncellendi' : 'Canlı Senkronize'}</span>
-            </div>
+            {isOnline ? (
+              <div 
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-all duration-300 ${
+                  hasLiveUpdate 
+                    ? 'bg-amber-100 text-amber-900 border-amber-300 ring-2 ring-amber-400/40 animate-pulse' 
+                    : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                }`}
+                title={hasLiveUpdate ? 'Yeni bir değişiklik algılandı ve anında yansıtıldı.' : 'Cloud Firestore ile canlı ve otomatik olarak senkronize durumdasınız.'}
+              >
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${hasLiveUpdate ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-ping'}`}></span>
+                  <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${hasLiveUpdate ? 'bg-amber-600' : 'bg-emerald-600'}`}></span>
+                </span>
+                <span>{hasLiveUpdate ? 'Veriler Güncellendi' : 'Canlı Senkronize'}</span>
+              </div>
+            ) : (
+              <div 
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white border border-amber-600 shadow-xs animate-pulse"
+                title="İnternet bağlantısı kesildi. Sınırsız IndexedDB önbelleği devrede. Yapılan değişiklikler yerel olarak güvenle saklanacak ve bağlantı geldiğinde bulut ile eşitlenecektir."
+              >
+                <WifiOff className="w-3 h-3" />
+                <span>Çevrimdışı (Sınırsız Önbellek)</span>
+              </div>
+            )}
           </div>
           <p className="text-xs text-slate-500 font-medium">
             Sürdürülebilirlik &amp; Çevre Yönetim Portalı (EcoCampus)
@@ -119,6 +137,19 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               )}
             </div>
+          )}
+
+          {/* PWA Kurulum Butonu (Uygulama Olarak Bilgisayara / Telefona Tek Tıkla Yükleme) */}
+          {isPwaInstallable && onPromptInstall && (
+            <button
+              onClick={onPromptInstall}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white shadow-xs transition-all cursor-pointer hover:scale-[1.02] border border-emerald-500"
+              title="Sürdürülebilirlik Portalını bilgisayarınıza veya telefonunuza bağımsız uygulama (PWA) olarak yükleyin"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Uygulamayı Yükle (PWA)</span>
+              <span className="sm:hidden">PWA Yükle</span>
+            </button>
           )}
 
           {/* Rol Seçici (Yalnızca Erkan Sağnak için Yönetici Önizleme Modu, Diğer Kullanıcılar İçin Sabit Yetki Rozeti) */}
@@ -211,6 +242,19 @@ export const Header: React.FC<HeaderProps> = ({
                   <Sparkles className="w-3 h-3 text-emerald-600" />
                   <span>Koordinatör</span>
                 </button>
+
+                {/* Okul Müdürü Butonu */}
+                <button
+                  onClick={() => onRoleChange('principal')}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                    currentUser.role === 'principal'
+                      ? 'bg-white text-purple-900 shadow-sm font-semibold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <School className="w-3 h-3 text-purple-600" />
+                  <span>Okul Müdürü</span>
+                </button>
               </div>
 
               {/* Hızlı Rolüme Dön Butonu */}
@@ -229,7 +273,9 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5">
               <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
               <span>
-                {currentUser.role === 'dept_head'
+                {currentUser.role === 'principal'
+                  ? 'Okul Müdürü'
+                  : currentUser.role === 'dept_head'
                   ? `${DEPARTMENTS.find(d => d.id === currentUser.departmentId)?.name || 'Bölüm Başkanı'}`
                   : currentUser.role === 'coordinator'
                   ? 'Koordinatör'
@@ -263,7 +309,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </p>
                   {isSimulating && (
                     <span className="text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-bold border border-amber-200">
-                      {currentUser.role === 'dept_head' ? 'Bölüm Başkanı' : 'Danışman Öğretmen'}
+                      {currentUser.role === 'principal' ? 'Okul Müdürü' : currentUser.role === 'dept_head' ? 'Bölüm Başkanı' : 'Danışman Öğretmen'}
                     </span>
                   )}
                 </div>

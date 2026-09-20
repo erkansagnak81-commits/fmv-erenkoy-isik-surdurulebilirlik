@@ -1,6 +1,15 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
+  CACHE_SIZE_UNLIMITED,
+  getPersistentCacheIndexManager,
+  enablePersistentCacheIndexAutoCreation,
+  Firestore
+} from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyA-lLkgK4kGJs7Hr-6dSHT6vQ_xKVI43cY',
@@ -16,7 +25,34 @@ export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseCon
 
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Sınırsız IndexedDB Yerel Önbelleği (Multiple Tab Manager + Unlimited Cache Size)
+// Çok sayıda öğretmen girişi ve çoklu sekme kullanımında Firebase Firestore okuma kotalarından maksimum tasarruf sağlar.
+export const db: Firestore = (() => {
+  try {
+    const firestoreInstance = initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+        cacheSizeBytes: CACHE_SIZE_UNLIMITED,
+      }),
+    });
+
+    // Otomatik yerel sorgu indekslemeyi etkinleştir (Önbellek sorgu hızlandırma)
+    try {
+      const indexManager = getPersistentCacheIndexManager(firestoreInstance);
+      if (indexManager) {
+        enablePersistentCacheIndexAutoCreation(indexManager);
+      }
+    } catch {
+      // ignore
+    }
+
+    return firestoreInstance;
+  } catch (err) {
+    console.warn('Firestore persistent cache initialization fallback to default:', err);
+    return getFirestore(app);
+  }
+})();
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({

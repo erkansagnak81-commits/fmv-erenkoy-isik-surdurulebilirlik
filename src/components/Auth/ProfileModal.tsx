@@ -236,12 +236,31 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200">
               <span className="text-slate-500 font-medium">Yetki / Rol</span>
-              <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                {currentUser.role === 'coordinator' ? 'Koordinatör' : currentUser.role === 'dept_head' ? 'Bölüm Başkanı' : 'Danışman Öğretmen'}
+              <span className={`font-bold px-2 py-0.5 rounded-md border ${
+                currentUser.role === 'principal'
+                  ? 'text-purple-800 bg-purple-50 border-purple-200'
+                  : currentUser.role === 'coordinator' || currentUser.role === 'admin'
+                  ? 'text-emerald-800 bg-emerald-50 border-emerald-200'
+                  : currentUser.role === 'dept_head'
+                  ? 'text-blue-800 bg-blue-50 border-blue-200'
+                  : 'text-slate-800 bg-slate-100 border-slate-200'
+              }`}>
+                {currentUser.role === 'principal' 
+                  ? 'Okul Müdürü' 
+                  : currentUser.role === 'coordinator' 
+                  ? 'Koordinatör' 
+                  : currentUser.role === 'dept_head' 
+                  ? 'Bölüm Başkanı' 
+                  : 'Danışman Öğretmen'}
               </span>
             </div>
 
-            {currentUser.role === 'coordinator' || currentUser.role === 'admin' ? (
+            {currentUser.role === 'principal' ? (
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-purple-50/60 border border-purple-200">
+                <span className="text-slate-500 font-medium">Zümre / Bölüm</span>
+                <span className="font-bold text-purple-900">Okul Yönetimi (Genel Yetkili)</span>
+              </div>
+            ) : currentUser.role === 'coordinator' || currentUser.role === 'admin' ? (
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-200">
                 <span className="text-slate-500 font-medium">Zümre / Bölüm</span>
                 <span className="font-bold text-emerald-800">Okul Geneli (Tüm Zümreler)</span>

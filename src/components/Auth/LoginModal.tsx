@@ -244,13 +244,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   </div>
 
                   <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border shrink-0 ${
-                    p.role === 'coordinator' || p.role === 'admin'
+                    p.role === 'principal'
+                      ? 'bg-purple-100 text-purple-800 border-purple-200'
+                      : p.role === 'coordinator' || p.role === 'admin'
                       ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
                       : p.role === 'dept_head'
                       ? 'bg-blue-100 text-blue-800 border-blue-200'
                       : 'bg-amber-100 text-amber-800 border-amber-200'
                   }`}>
-                    {p.role === 'coordinator' || p.role === 'admin' 
+                    {p.role === 'principal'
+                      ? 'Okul Müdürü'
+                      : p.role === 'coordinator' || p.role === 'admin' 
                       ? 'Yönetici' 
                       : p.role === 'dept_head' 
                       ? 'Bölüm Başkanı' 

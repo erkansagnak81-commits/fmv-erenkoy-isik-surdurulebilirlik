@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { CurriculumIntegration, UserProfile, AcademicYear } from '../../types';
-import { DEPARTMENTS, SDG_GOALS } from '../../constants';
+import { CurriculumIntegration, UserProfile, AcademicYear, SystemRolePermissions } from '../../types';
+import { DEPARTMENTS, SDG_GOALS, isSuperAdminEmail } from '../../constants';
+import { hasUserActionPermission } from '../../constants/permissions';
 import { exportCurriculumsToCsv } from '../../lib/exportUtils';
 import { 
   BookOpenCheck, 
@@ -25,6 +26,8 @@ interface CurriculumTrackerProps {
   onDeleteCurriculum: (id: string) => void;
   currentUser: UserProfile;
   activeAcademicYear?: AcademicYear;
+  academicYears?: AcademicYear[];
+  rolePermissions?: SystemRolePermissions;
 }
 
 export const CurriculumTracker: React.FC<CurriculumTrackerProps> = ({
@@ -34,31 +37,41 @@ export const CurriculumTracker: React.FC<CurriculumTrackerProps> = ({
   onDeleteCurriculum,
   currentUser,
   activeAcademicYear,
+  academicYears,
+  rolePermissions,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDept, setSelectedDept] = useState<string>('all');
   const [selectedSdg, setSelectedSdg] = useState<number | null>(null);
   const [scopeTab, setScopeTab] = useState<'my' | 'school'>(
-    currentUser.role === 'coordinator' || currentUser.role === 'admin' ? 'school' : 'my'
+    currentUser.role === 'coordinator' || currentUser.role === 'admin' || currentUser.role === 'principal' ? 'school' : 'my'
   );
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CurriculumIntegration | null>(null);
   const [deletingItem, setDeletingItem] = useState<CurriculumIntegration | null>(null);
 
+  const isSuperAdmin = isSuperAdminEmail(currentUser.email) || currentUser.role === 'admin';
+  const canCreate = isSuperAdmin || (rolePermissions ? hasUserActionPermission(currentUser, 'canCreateCurriculum', rolePermissions) : true);
+  const canExport = isSuperAdmin || (rolePermissions ? hasUserActionPermission(currentUser, 'canExportCurriculum', rolePermissions) : true);
+
   // Form State
-  const [courseName, setCourseName] = useState('11. Sınıf Fizik');
-  const [gradeLevel, setGradeLevel] = useState('11. Sınıf');
-  const [departmentId, setDepartmentId] = useState(currentUser.departmentId || DEPARTMENTS[0].id);
+  const isDeptLocked = currentUser.role === 'teacher' || currentUser.role === 'dept_head';
+  const userDeptId = currentUser.departmentId || DEPARTMENTS[0].id;
+  const activeYearId = activeAcademicYear?.id || '2026-2027';
+  const defaultTerm = `${activeYearId} 1. Dönem`;
+
+  const [courseName, setCourseName] = useState('');
+  const [gradeLevel, setGradeLevel] = useState('');
+  const [departmentId, setDepartmentId] = useState(isDeptLocked ? userDeptId : (currentUser.departmentId || DEPARTMENTS[0].id));
   const [teacherName, setTeacherName] = useState(currentUser.name);
   const [learningOutcome, setLearningOutcome] = useState('');
   const [activityDescription, setActivityDescription] = useState('');
   const [sdgGoals, setSdgGoals] = useState<number[]>([7, 13]);
   const [studentCount, setStudentCount] = useState(120);
-  const defaultTerm = `${activeAcademicYear?.id || '2026-2027'} Güz`;
   const [academicTerm, setAcademicTerm] = useState(defaultTerm);
 
   const canManageItem = (item: CurriculumIntegration) => {
-    if (currentUser.role === 'coordinator' || currentUser.role === 'admin') return true;
+    if (currentUser.role === 'coordinator' || currentUser.role === 'admin' || currentUser.role === 'principal') return true;
     if (currentUser.role === 'dept_head') return item.departmentId === currentUser.departmentId;
     if (currentUser.role === 'teacher') {
       return (
@@ -121,35 +134,40 @@ export const CurriculumTracker: React.FC<CurriculumTrackerProps> = ({
   const handleOpenAddModal = () => {
     setEditingItem(null);
     setCourseName('');
-    setGradeLevel('10. Sınıf');
-    setDepartmentId(currentUser.departmentId || DEPARTMENTS[0].id);
+    setGradeLevel('');
+    setDepartmentId(isDeptLocked ? userDeptId : (currentUser.departmentId || DEPARTMENTS[0].id));
     setTeacherName(currentUser.name);
     setLearningOutcome('');
     setActivityDescription('');
     setSdgGoals([7, 13]);
     setStudentCount(100);
-    setAcademicTerm(defaultTerm);
+    setAcademicTerm(`${activeAcademicYear?.id || '2026-2027'} 1. Dönem`);
     setModalOpen(true);
   };
 
   const handleOpenEditModal = (item: CurriculumIntegration) => {
     setEditingItem(item);
     setCourseName(item.courseName);
-    setGradeLevel(item.gradeLevel || '10. Sınıf');
-    setDepartmentId(item.departmentId);
+    setGradeLevel(item.gradeLevel || '');
+    setDepartmentId(isDeptLocked ? userDeptId : item.departmentId);
     setTeacherName(item.teacherName || currentUser.name);
     setLearningOutcome(item.learningOutcome);
     setActivityDescription(item.activityDescription);
     setSdgGoals(item.sdgGoals || []);
     setStudentCount(item.studentCount || 0);
-    setAcademicTerm(item.academicTerm || defaultTerm);
+    setAcademicTerm(item.academicTerm || `${activeAcademicYear?.id || '2026-2027'} 1. Dönem`);
     setModalOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!editingItem && !canCreate) return;
     if (!courseName.trim()) {
       alert('Lütfen ders adını giriniz.');
+      return;
+    }
+    if (!gradeLevel.trim()) {
+      alert('Lütfen sınıf / kademe seçiniz.');
       return;
     }
     if (!learningOutcome.trim() || !activityDescription.trim()) {
@@ -161,16 +179,20 @@ export const CurriculumTracker: React.FC<CurriculumTrackerProps> = ({
       return;
     }
 
+    const finalDepartmentId = isDeptLocked && currentUser.departmentId 
+      ? currentUser.departmentId 
+      : departmentId;
+
     const payload = {
-      departmentId,
+      departmentId: finalDepartmentId,
       teacherName: teacherName.trim() || currentUser.name,
       courseName: courseName.trim(),
-      gradeLevel: gradeLevel.trim() || '10. Sınıf',
+      gradeLevel: gradeLevel.trim(),
       learningOutcome: learningOutcome.trim(),
       sdgGoals,
       activityDescription: activityDescription.trim(),
       studentCount: Number(studentCount) || 0,
-      academicTerm: academicTerm.trim() || '2026-2027 Güz',
+      academicTerm: academicTerm.trim() || `${activeAcademicYear?.id || '2026-2027'} 1. Dönem`,
     };
 
     if (editingItem) {
@@ -214,22 +236,26 @@ export const CurriculumTracker: React.FC<CurriculumTrackerProps> = ({
               {totalStudents.toLocaleString('tr-TR')} Öğrenciye Ulaşıldı
             </span>
 
-            <button
-              onClick={handleExportCsv}
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
-              title="Müfredat matrisini Excel / CSV formatında indir"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-600" />
-              <span>Excel / CSV</span>
-            </button>
+            {canExport && (
+              <button
+                onClick={handleExportCsv}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
+                title="Müfredat matrisini Excel / CSV formatında indir"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-600" />
+                <span>Excel / CSV</span>
+              </button>
+            )}
 
-            <button
-              onClick={handleOpenAddModal}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Yeni Ders Kazanımı Eşle</span>
-            </button>
+            {canCreate && (
+              <button
+                onClick={handleOpenAddModal}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Yeni Ders Kazanımı Eşle</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -293,7 +319,7 @@ export const CurriculumTracker: React.FC<CurriculumTrackerProps> = ({
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
             {/* Zümre Filtresi */}
-            {scopeTab === 'school' || currentUser.role === 'coordinator' || currentUser.role === 'admin' ? (
+            {scopeTab === 'school' || currentUser.role === 'coordinator' || currentUser.role === 'admin' || currentUser.role === 'principal' ? (
               <select
                 value={selectedDept}
                 onChange={(e) => setSelectedDept(e.target.value)}
@@ -462,31 +488,46 @@ export const CurriculumTracker: React.FC<CurriculumTrackerProps> = ({
 
       {/* Kazanım Ekleme / Düzenleme Modalı */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-8 animate-in fade-in zoom-in duration-200">
-            <div className="px-6 py-4 bg-purple-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setModalOpen(false);
+              setEditingItem(null);
+            }
+          }}
+        >
+          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] my-auto animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 bg-purple-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
                 {editingItem ? (
                   <Pencil className="w-5 h-5 text-purple-300" />
                 ) : (
                   <BookOpenCheck className="w-5 h-5 text-purple-300" />
                 )}
-                <h3 className="font-bold text-sm">
-                  {editingItem ? 'Ders İçi Kazanım Eşleştirmesini Düzenle' : 'Yeni Ders İçi Kazanım Eşleştirmesi'}
-                </h3>
+                <div>
+                  <h3 className="font-bold text-sm leading-tight">
+                    {editingItem ? 'Ders İçi Kazanım Eşleştirmesini Düzenle' : 'Yeni Ders İçi Kazanım Eşleştirmesi'}
+                  </h3>
+                  <p className="text-[11px] text-purple-200/80">
+                    Sürdürülebilirlik ilkelerinin MEB ders kazanımlarıyla ilişkilendirilmesi
+                  </p>
+                </div>
               </div>
               <button 
+                type="button"
                 onClick={() => {
                   setModalOpen(false);
                   setEditingItem(null);
                 }} 
-                className="text-white/80 hover:text-white"
+                className="p-1.5 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Ders Adı *</label>
@@ -501,44 +542,70 @@ export const CurriculumTracker: React.FC<CurriculumTrackerProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Sınıf / Kademe *</label>
-                  <input
-                    type="text"
-                    list="curriculumGradeLevels"
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Sınıf / Kademe *
+                  </label>
+                  <select
                     required
                     value={gradeLevel}
                     onChange={(e) => setGradeLevel(e.target.value)}
-                    placeholder="Örn: 10. Sınıf"
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                  />
-                  <datalist id="curriculumGradeLevels">
-                    <option value="Hazırlık" />
-                    <option value="9. Sınıf" />
-                    <option value="10. Sınıf" />
-                    <option value="11. Sınıf" />
-                    <option value="12. Sınıf" />
-                    <option value="Fen Lisesi 9" />
-                    <option value="Fen Lisesi 10" />
-                    <option value="Fen Lisesi 11" />
-                    <option value="Fen Lisesi 12" />
-                    <option value="Ortaokul" />
-                    <option value="Tüm Kademeler" />
-                  </datalist>
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 font-medium"
+                  >
+                    <option value="">Sınıf / Kademe Seçiniz...</option>
+                    <option value="Hazırlık">Hazırlık</option>
+                    <option value="9. Sınıf">9. Sınıf</option>
+                    <option value="10. Sınıf">10. Sınıf</option>
+                    <option value="11. Sınıf">11. Sınıf</option>
+                    <option value="12. Sınıf">12. Sınıf</option>
+                    <option value="Fen Lisesi 9">Fen Lisesi 9</option>
+                    <option value="Fen Lisesi 10">Fen Lisesi 10</option>
+                    <option value="Fen Lisesi 11">Fen Lisesi 11</option>
+                    <option value="Fen Lisesi 12">Fen Lisesi 12</option>
+                    <option value="Ortaokul">Ortaokul</option>
+                    <option value="Tüm Kademeler">Tüm Kademeler</option>
+                    {gradeLevel && ![
+                      'Hazırlık', '9. Sınıf', '10. Sınıf', '11. Sınıf', '12. Sınıf',
+                      'Fen Lisesi 9', 'Fen Lisesi 10', 'Fen Lisesi 11', 'Fen Lisesi 12',
+                      'Ortaokul', 'Tüm Kademeler'
+                    ].includes(gradeLevel) && (
+                      <option value={gradeLevel}>{gradeLevel}</option>
+                    )}
+                  </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Sorumlu Zümre *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700 uppercase">
+                      Sorumlu Zümre *
+                    </label>
+                    {isDeptLocked && (
+                      <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded flex items-center gap-1">
+                        <Lock className="w-3 h-3 text-purple-600" />
+                        Zümrenize Kilitlendi
+                      </span>
+                    )}
+                  </div>
                   <select
-                    value={departmentId}
+                    disabled={isDeptLocked}
+                    value={isDeptLocked ? userDeptId : departmentId}
                     onChange={(e) => setDepartmentId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white"
+                    className={`w-full px-3 py-2 text-xs rounded-xl border ${
+                      isDeptLocked
+                        ? 'border-slate-200 bg-slate-100 text-slate-700 font-semibold cursor-not-allowed opacity-90'
+                        : 'border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20'
+                    }`}
                   >
                     {DEPARTMENTS.map(d => (
                       <option key={d.id} value={d.id}>{d.name}</option>
                     ))}
                   </select>
+                  {isDeptLocked && (
+                    <p className="text-[10.5px] text-slate-400 mt-1">
+                      Öğretmenler ve bölüm başkanları yalnızca bağlı oldukları zümre için kazanım ekleyebilir.
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -614,37 +681,67 @@ export const CurriculumTracker: React.FC<CurriculumTrackerProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Eğitim Dönemi</label>
-                  <input
-                    type="text"
-                    list="academic-term-list"
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700 uppercase">
+                      Eğitim Dönemi *
+                    </label>
+                    {activeAcademicYear && (
+                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                        Aktif Yıl: {activeAcademicYear.id}
+                      </span>
+                    )}
+                  </div>
+                  <select
                     value={academicTerm}
                     onChange={(e) => setAcademicTerm(e.target.value)}
-                    placeholder="Örn: 2026-2027 Güz"
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300"
-                  />
-                  <datalist id="academic-term-list">
-                    <option value={`${activeAcademicYear?.id || '2026-2027'} Güz`} />
-                    <option value={`${activeAcademicYear?.id || '2026-2027'} Bahar`} />
-                    <option value={`${activeAcademicYear?.id || '2026-2027'} Yıl Boyu`} />
-                  </datalist>
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  >
+                    <optgroup label={`Aktif Eğitim Yılı (${activeAcademicYear?.id || '2026-2027'})`}>
+                      <option value={`${activeAcademicYear?.id || '2026-2027'} 1. Dönem`}>
+                        {activeAcademicYear?.id || '2026-2027'} 1. Dönem
+                      </option>
+                      <option value={`${activeAcademicYear?.id || '2026-2027'} 2. Dönem`}>
+                        {activeAcademicYear?.id || '2026-2027'} 2. Dönem
+                      </option>
+                      <option value={`${activeAcademicYear?.id || '2026-2027'} Yıl Boyu`}>
+                        {activeAcademicYear?.id || '2026-2027'} Yıl Boyu
+                      </option>
+                    </optgroup>
+                    {academicYears && academicYears.filter(y => y.id !== (activeAcademicYear?.id || '2026-2027')).map(year => (
+                      <optgroup key={year.id} label={year.id}>
+                        <option value={`${year.id} 1. Dönem`}>{year.id} 1. Dönem</option>
+                        <option value={`${year.id} 2. Dönem`}>{year.id} 2. Dönem</option>
+                        <option value={`${year.id} Yıl Boyu`}>{year.id} Yıl Boyu</option>
+                      </optgroup>
+                    ))}
+                    {academicTerm && ![
+                      `${activeAcademicYear?.id || '2026-2027'} 1. Dönem`,
+                      `${activeAcademicYear?.id || '2026-2027'} 2. Dönem`,
+                      `${activeAcademicYear?.id || '2026-2027'} Yıl Boyu`,
+                    ].includes(academicTerm) && !academicYears?.some(y => [
+                      `${y.id} 1. Dönem`, `${y.id} 2. Dönem`, `${y.id} Yıl Boyu`
+                    ].includes(academicTerm)) && (
+                      <option value={academicTerm}>{academicTerm}</option>
+                    )}
+                  </select>
                 </div>
               </div>
+            </div>
 
-              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+              <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => {
                     setModalOpen(false);
                     setEditingItem(null);
                   }}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-medium hover:bg-slate-50 transition-colors"
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   Vazgeç
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-xs transition-colors"
+                  className="px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 >
                   {editingItem ? 'Değişiklikleri Kaydet' : 'Matrise Kaydet'}
                 </button>

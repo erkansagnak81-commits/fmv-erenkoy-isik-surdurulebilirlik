@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ProjectEvent, UserProfile, ProjectStatus, AcademicYear } from '../../types';
+import { ProjectEvent, UserProfile, ProjectStatus, AcademicYear, SystemRolePermissions } from '../../types';
 import { DEPARTMENTS, SDG_GOALS, parseTargetGrades, isSuperAdminEmail } from '../../constants';
+import { hasUserActionPermission } from '../../constants/permissions';
 import { exportProjectsToCsv } from '../../lib/exportUtils';
 import { ProjectDetailModal } from './ProjectDetailModal';
 import { 
@@ -40,6 +41,7 @@ interface ProjectListProps {
   onClearSdgFilter: () => void;
   onNavigateTab?: (tab: string) => void;
   activeAcademicYear?: AcademicYear;
+  rolePermissions?: SystemRolePermissions;
 }
 
 export const ProjectList: React.FC<ProjectListProps> = ({
@@ -53,6 +55,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
   onClearSdgFilter,
   onNavigateTab,
   activeAcademicYear,
+  rolePermissions,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -67,22 +70,22 @@ export const ProjectList: React.FC<ProjectListProps> = ({
   });
   
   // Kapsam Sekmesi: 'my' (Bireysel/Zümre/Tüm Havuz) vs 'school' (Okul Geneli İlham Vitrini)
-  // Koordinatör veya admin için vitrinde onaylı proje varsa vitrinle, yoksa doğrudan tüm havuzla başla
+  // Koordinatör, admin veya okul müdürü için vitrinde onaylı proje varsa vitrinle, yoksa doğrudan tüm havuzla başla
   const [scopeTab, setScopeTab] = useState<'my' | 'school'>(() => {
-    if (currentUser.role === 'coordinator' || currentUser.role === 'admin') {
+    if (currentUser.role === 'coordinator' || currentUser.role === 'admin' || currentUser.role === 'principal') {
       const hasApproved = projects.some(p => p.status === 'coordinator_approved' || p.status === 'completed');
       return hasApproved ? 'school' : 'my';
     }
     return 'my';
   });
 
-  // Projeler asenkron yüklendiğinde; koordinatör/admin için okul vitrininde onaylı proje yoksa boş ekran göstermemek adına 'my' (Tüm Proje Havuzu) sekmesine otomatik odaklan
+  // Projeler asenkron yüklendiğinde; koordinatör/admin/müdür için okul vitrininde onaylı proje yoksa boş ekran göstermemek adına 'my' (Tüm Proje Havuzu) sekmesine otomatik odaklan
   const hasAutoSelectedScopeRef = useRef(false);
   useEffect(() => {
     if (!hasAutoSelectedScopeRef.current && projects.length > 0) {
       hasAutoSelectedScopeRef.current = true;
       const hasApproved = projects.some(p => p.status === 'coordinator_approved' || p.status === 'completed');
-      if (!hasApproved && (currentUser.role === 'coordinator' || currentUser.role === 'admin')) {
+      if (!hasApproved && (currentUser.role === 'coordinator' || currentUser.role === 'admin' || currentUser.role === 'principal')) {
         setScopeTab('my');
       }
     }
@@ -141,9 +144,15 @@ export const ProjectList: React.FC<ProjectListProps> = ({
     return matchesSearch && matchesStatus && matchesDept && matchesSdg && matchesYear;
   });
 
+  const isSuperAdmin = isSuperAdminEmail(currentUser.email) || currentUser.role === 'admin';
+  const rolePerms = rolePermissions ? rolePermissions[currentUser.role]?.permissions : undefined;
+  const canDeletePerm = hasUserActionPermission(currentUser, 'canDeleteProject', rolePermissions);
+
   const canDeleteProject = (project: ProjectEvent) => {
     if (!onDeleteProject) return false;
-    if (currentUser.role === 'coordinator' || currentUser.role === 'admin' || isSuperAdminEmail(currentUser.email)) {
+    if (isSuperAdmin) return true;
+    if (!canDeletePerm) return false;
+    if (currentUser.role === 'coordinator' || currentUser.role === 'principal') {
       return true;
     }
     return project.advisorId === currentUser.id && (project.status === 'draft' || project.status === 'submitted');
@@ -248,7 +257,21 @@ export const ProjectList: React.FC<ProjectListProps> = ({
 
   const canEditProject = (project: ProjectEvent) => {
     if (project.status !== 'draft' && project.status !== 'revision_needed') return false;
-    if (currentUser.role === 'coordinator' || currentUser.role === 'admin') return true;
+    if (isSuperAdmin) return true;
+    if (rolePerms) {
+      if (rolePerms.canEditAllProjects) return true;
+      if (rolePerms.canEditDeptProject && project.departmentId === currentUser.departmentId) return true;
+      if (rolePerms.canEditOwnProject) {
+        const isCollaborator = project.collaboratingTeachers?.some(t => 
+          t.toLowerCase().includes(currentUser.name.toLowerCase())
+        );
+        return project.advisorId === currentUser.id || 
+          project.advisorName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+          !!isCollaborator;
+      }
+      return false;
+    }
+    if (currentUser.role === 'coordinator' || currentUser.role === 'admin' || currentUser.role === 'principal') return true;
     if (currentUser.role === 'dept_head') return project.departmentId === currentUser.departmentId;
     if (currentUser.role === 'teacher') {
       const isCollaborator = project.collaboratingTeachers?.some(t => 
@@ -263,7 +286,22 @@ export const ProjectList: React.FC<ProjectListProps> = ({
 
   const canReportProject = (project: ProjectEvent) => {
     if (project.status !== 'coordinator_approved') return false;
-    if (currentUser.role === 'coordinator' || currentUser.role === 'admin') return true;
+    if (isSuperAdmin) return true;
+    if (rolePerms) {
+      if (!rolePerms.canSubmitReport) return false;
+      if (rolePerms.canEditAllProjects) return true;
+      if (rolePerms.canEditDeptProject && project.departmentId === currentUser.departmentId) return true;
+      if (rolePerms.canEditOwnProject) {
+        const isCollaborator = project.collaboratingTeachers?.some(t => 
+          t.toLowerCase().includes(currentUser.name.toLowerCase())
+        );
+        return project.advisorId === currentUser.id || 
+          project.advisorName.toLowerCase().includes(currentUser.name.toLowerCase()) ||
+          !!isCollaborator;
+      }
+      return false;
+    }
+    if (currentUser.role === 'coordinator' || currentUser.role === 'admin' || currentUser.role === 'principal') return true;
     if (currentUser.role === 'dept_head') return project.departmentId === currentUser.departmentId;
     if (currentUser.role === 'teacher') {
       const isCollaborator = project.collaboratingTeachers?.some(t => 
@@ -326,6 +364,9 @@ export const ProjectList: React.FC<ProjectListProps> = ({
     }
   };
 
+  const canCreate = hasUserActionPermission(currentUser, 'canCreateProject', rolePermissions);
+  const canExport = hasUserActionPermission(currentUser, 'canExportProjects', rolePermissions);
+
   const handleExportCsv = () => {
     exportProjectsToCsv(filteredProjects, DEPARTMENTS);
   };
@@ -343,13 +384,12 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                   : currentUser.role === 'teacher' 
                   ? 'Bireysel Proje ve Faaliyetlerim' 
                   : currentUser.role === 'dept_head' 
-                  ? `${DEPARTMENTS.find(d => d.id === currentUser.departmentId)?.name || 'Zümre'} Faaliyetleri` 
-                  : 'Proje ve Etkinlik Havuzu'}
+                  ? 'Zümre Proje & Etkinlik Havuzu' 
+                  : 'Tüm Zümreler Proje & Etkinlik Havuzu'}
               </h2>
               {scopeTab === 'school' ? (
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                  <Globe2 className="w-3 h-3 text-emerald-700" />
-                  <span>Tüm Zümreler (Onaylı Arşiv)</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                  Resmi Okul Vitrini
                 </span>
               ) : (
                 currentUser.role === 'teacher' ? (
@@ -375,14 +415,16 @@ export const ProjectList: React.FC<ProjectListProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={handleExportCsv}
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
-              title="Filtrelenmiş projeleri Excel / CSV formatında indir"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-600" />
-              <span>Excel / CSV</span>
-            </button>
+            {canExport && (
+              <button
+                onClick={handleExportCsv}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
+                title="Filtrelenmiş projeleri Excel / CSV formatında indir"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-600" />
+                <span>Excel / CSV</span>
+              </button>
+            )}
 
             {onNavigateTab && (
               <button
@@ -395,13 +437,15 @@ export const ProjectList: React.FC<ProjectListProps> = ({
               </button>
             )}
 
-            <button
-              onClick={onOpenNewModal}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm hover:shadow transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Yeni Proje Başlat</span>
-            </button>
+            {canCreate && (
+              <button
+                onClick={onOpenNewModal}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm hover:shadow transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Yeni Proje Başlat</span>
+              </button>
+            )}
           </div>
         </div>
 

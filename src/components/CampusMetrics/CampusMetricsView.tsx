@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { CampusMetric, UserProfile, AcademicYear } from '../../types';
+import { CampusMetric, UserProfile, AcademicYear, SystemRolePermissions } from '../../types';
+import { hasUserActionPermission } from '../../constants/permissions';
 import { calculateCarbonAnalysis } from '../../lib/carbonCalculator';
 import { exportCampusMetricsToCsv } from '../../lib/exportUtils';
 import { 
@@ -33,6 +34,7 @@ interface CampusMetricsViewProps {
   onClearMetrics?: () => void;
   currentUser: UserProfile;
   activeAcademicYear?: AcademicYear;
+  rolePermissions?: SystemRolePermissions;
 }
 
 export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
@@ -43,13 +45,15 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
   onClearMetrics,
   currentUser,
   activeAcademicYear,
+  rolePermissions,
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [editingMetric, setEditingMetric] = useState<CampusMetric | null>(null);
   const [deletingMetric, setDeletingMetric] = useState<CampusMetric | null>(null);
 
-  const canManage = currentUser.role === 'coordinator' || currentUser.role === 'admin';
+  const canEdit = hasUserActionPermission(currentUser, 'canEditCampusMetrics', rolePermissions);
+  const canReset = hasUserActionPermission(currentUser, 'canResetCampusMetrics', rolePermissions);
 
   // Form State
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
@@ -121,6 +125,7 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEdit) return;
 
     try {
       confetti({ particleCount: 50, spread: 60 });
@@ -238,7 +243,7 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
             </button>
           )}
 
-          {metrics.length > 0 && canManage && onClearMetrics && (
+          {metrics.length > 0 && canReset && onClearMetrics && (
             <button
               onClick={() => setConfirmClearOpen(true)}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors cursor-pointer"
@@ -248,13 +253,15 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
             </button>
           )}
 
-          <button
-            onClick={handleOpenNewModal}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Aylık Sayaç / Atık Verisi Gir</span>
-          </button>
+          {canEdit && (
+            <button
+              onClick={handleOpenNewModal}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Aylık Sayaç / Atık Verisi Gir</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -439,13 +446,20 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
               FMV Erenköy Işık Lisesi ve Fen Lisesi elektrik sayaçları, su tüketimi, fotokopi kağıdı ve sıfır atık geri dönüşüm tartım verilerini aylık periyotlar halinde kaydederek grafiksel trendleri ve karbon ayak izini buradan izleyebilirsiniz.
             </p>
           </div>
-          <button
-            onClick={() => setModalOpen(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>İlk Aylık Veri Girişini Yap</span>
-          </button>
+          {canEdit ? (
+            <button
+              onClick={() => setModalOpen(true)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>İlk Aylık Veri Girişini Yap</span>
+            </button>
+          ) : (
+            <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-medium border border-slate-200 shadow-2xs">
+              <Leaf className="w-4 h-4 text-teal-600 shrink-0" />
+              <span>Bu hesapta veri girişi yetkisi bulunmamaktadır (Yalnızca Görüntüleme Modu).</span>
+            </div>
+          )}
         </div>
       ) : (
         /* Grafikler Alanı */
@@ -553,7 +567,7 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
                     <th className="p-3">Kompost (kg)</th>
                     <th className="p-3">Not</th>
                     <th className="p-3">Kayıt / Güncelleme</th>
-                    {canManage && <th className="p-3 text-right">İşlem</th>}
+                    {canEdit && <th className="p-3 text-right">İşlem</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -585,7 +599,7 @@ export const CampusMetricsView: React.FC<CampusMetricsViewProps> = ({
                             )}
                           </div>
                         </td>
-                        {canManage && (
+                        {canEdit && (
                           <td className="p-3 text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               <button

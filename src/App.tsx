@@ -8,7 +8,10 @@ import {
   ProjectStatus, 
   ImpactReport,
   Department,
-  AcademicYear 
+  AcademicYear,
+  SystemRolePermissions,
+  ActivityLog,
+  LogCategory
 } from './types';
 import { DEPARTMENTS, isSuperAdminEmail } from './constants';
 import { 
@@ -17,6 +20,7 @@ import {
 } from './data/initialData';
 import { dbService } from './lib/dbService';
 import { isFirebaseConfigured, auth } from './lib/firebase';
+import { pwaManager } from './lib/pwa';
 import { Header } from './components/Layout/Header';
 import { Sidebar } from './components/Layout/Sidebar';
 import { MetricCards } from './components/Dashboard/MetricCards';
@@ -30,6 +34,7 @@ import { CurriculumTracker } from './components/Curriculum/CurriculumTracker';
 import { CampusMetricsView } from './components/CampusMetrics/CampusMetricsView';
 import { AnnualReportView } from './components/Reports/AnnualReportView';
 import { UserManagementView } from './components/Admin/UserManagementView';
+import { ActivityLogsView } from './components/Admin/ActivityLogsView';
 import { LoginModal } from './components/Auth/LoginModal';
 import { PersonalDashboard } from './components/Dashboard/PersonalDashboard';
 import { SchoolCalendarView } from './components/Calendar/SchoolCalendarView';
@@ -83,6 +88,10 @@ export function App() {
         const match = profiles.find(p => p.id === activeTeacherId) || profiles.find(p => p.role === 'teacher');
         return match || MOCK_USERS.teacher;
       }
+      if (currentRole === 'principal') {
+        const match = profiles.find(p => p.role === 'principal');
+        return match || MOCK_USERS.principal;
+      }
       return authUser;
     }
 
@@ -96,8 +105,13 @@ export function App() {
   const [projects, setProjects] = useState<ProjectEvent[]>(() => dbService.getLocalProjects());
   const [curriculums, setCurriculums] = useState<CurriculumIntegration[]>(() => dbService.getLocalCurriculums());
   const [metrics, setMetrics] = useState<CampusMetric[]>(() => dbService.getLocalCampusMetrics());
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => dbService.getLocalActivityLogs());
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [activeAcademicYear, setActiveAcademicYear] = useState<AcademicYear | undefined>(undefined);
+  const [rolePermissions, setRolePermissions] = useState<SystemRolePermissions>(() => dbService.getLocalRolePermissions());
+
+  // Oturum Süresi Takibi
+  const sessionStartTimeRef = useRef<number>(Date.now());
 
   // Filtreler & Modallar
   const [selectedSdgFilter, setSelectedSdgFilter] = useState<number | null>(null);
@@ -105,6 +119,19 @@ export function App() {
   const [editingProject, setEditingProject] = useState<ProjectEvent | null>(null);
   const [isImpactModalOpen, setIsImpactModalOpen] = useState(false);
   const [selectedProjectForReport, setSelectedProjectForReport] = useState<ProjectEvent | null>(null);
+
+  // PWA & Çevrimiçi / Çevrimdışı Durumu
+  const [isOnline, setIsOnline] = useState<boolean>(() => pwaManager.getIsOnline());
+  const [isPwaInstallable, setIsPwaInstallable] = useState<boolean>(() => pwaManager.getIsInstallable());
+
+  useEffect(() => {
+    const unsubOnline = pwaManager.subscribeOnline(setIsOnline);
+    const unsubInstall = pwaManager.subscribeInstall(setIsPwaInstallable);
+    return () => {
+      unsubOnline();
+      unsubInstall();
+    };
+  }, []);
 
   // Toast Bildirimi
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -115,6 +142,65 @@ export function App() {
       setToastMessage(null);
     }, 4000);
   };
+
+  // Aktivite Kaydetme Yardımcısı
+  const trackActivity = async (
+    actionType: string,
+    category: LogCategory,
+    description: string,
+    details?: Record<string, any>,
+    sessionDurationSeconds?: number
+  ) => {
+    try {
+      const logUser = authUser || currentUser;
+      const created = await dbService.logActivity({
+        userId: logUser.id,
+        userName: logUser.name,
+        userEmail: logUser.email,
+        userRole: logUser.role,
+        departmentId: logUser.departmentId,
+        actionType,
+        category,
+        description,
+        details,
+        sessionDurationSeconds
+      });
+      setActivityLogs(prev => [created, ...prev.filter(l => l.id !== created.id)]);
+    } catch (err) {
+      console.warn('Aktivite logu kaydedilemedi:', err);
+    }
+  };
+
+  // Sekme kapatma / sayfadan ayrılma durumunda oturum süresini kaydet
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const activeUser = authUser || currentUser;
+      if (activeUser && activeUser.email) {
+        const durationSec = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000));
+        const logEntry: Omit<ActivityLog, 'id' | 'timestamp'> = {
+          userId: activeUser.id,
+          userName: activeUser.name,
+          userEmail: activeUser.email,
+          userRole: activeUser.role,
+          departmentId: activeUser.departmentId,
+          actionType: 'logout',
+          category: 'auth',
+          description: `${activeUser.name} oturumu kapattı (Süre: ${Math.floor(durationSec / 60)} dk ${durationSec % 60} sn)`,
+          sessionDurationSeconds: durationSec,
+        };
+        try {
+          const stored = localStorage.getItem('ecocampus_activity_logs_v1');
+          const list = stored ? JSON.parse(stored) : [];
+          const fullEntry = { ...logEntry, id: `log-${Date.now()}`, timestamp: new Date().toISOString() };
+          localStorage.setItem('ecocampus_activity_logs_v1', JSON.stringify([fullEntry, ...list].slice(0, 500)));
+        } catch {
+          // ignore
+        }
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [authUser, currentUser]);
 
   // Gerçek Zamanlı Canlı Güncelleme Rozet Durumu
   const [hasLiveUpdate, setHasLiveUpdate] = useState(false);
@@ -137,6 +223,7 @@ export function App() {
   const handleLogin = (user: UserProfile) => {
     setAuthUser(user);
     setCurrentRole(user.role);
+    sessionStartTimeRef.current = Date.now();
     if (user.departmentId) setActiveDeptHeadDeptId(user.departmentId);
     try {
       localStorage.setItem('ecocampus_auth_user', JSON.stringify(user));
@@ -144,9 +231,13 @@ export function App() {
       // ignore
     }
     showToast(`Hoş geldiniz, ${user.name} (${user.title || user.email})`);
+    trackActivity('login', 'auth', `${user.name} sisteme giriş yaptı.`);
   };
 
   const handleLogout = () => {
+    const logUser = authUser || currentUser;
+    const durationSec = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000));
+    trackActivity('logout', 'auth', `${logUser.name} sistemden çıkış yaptı. (Oturum: ${Math.floor(durationSec / 60)} dk ${durationSec % 60} sn)`, undefined, durationSec);
     setAuthUser(null);
     try {
       localStorage.removeItem('ecocampus_auth_user');
@@ -160,10 +251,12 @@ export function App() {
   const handleAddProfile = async (profileData: Omit<UserProfile, 'id'>) => {
     const created = await dbService.createProfile(profileData);
     setProfiles(prev => [created, ...prev]);
+    trackActivity('create_user', 'system', `Yeni kullanıcı profili oluşturuldu: ${created.name} (${created.email})`);
     showToast(`${created.name} (@fmvisik.k12.tr) sisteme başarıyla tanımlandı.`);
   };
 
   const handleUpdateProfile = async (id: string, updates: Partial<UserProfile>) => {
+    const target = profiles.find(p => p.id === id);
     const success = await dbService.updateProfile(id, updates);
     if (success) {
       setProfiles(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
@@ -176,6 +269,7 @@ export function App() {
           // ignore
         }
       }
+      trackActivity('update_user', 'system', `Kullanıcı profili güncellendi: ${target?.name || id}`);
       showToast('Kullanıcı bilgileri ve yetkileri güncellendi.');
     } else {
       showToast('Kullanıcı güncellenirken bir sorun oluştu.');
@@ -183,9 +277,11 @@ export function App() {
   };
 
   const handleDeleteProfile = async (id: string) => {
+    const target = profiles.find(p => p.id === id);
     const success = await dbService.deleteProfile(id);
     if (success) {
       setProfiles(prev => prev.filter(p => p.id !== id));
+      trackActivity('delete_user', 'system', `Kullanıcı sistemden silindi: ${target?.name || id}`);
       showToast('Kullanıcı sistemden kaldırıldı.');
     }
   };
@@ -196,6 +292,7 @@ export function App() {
     setAcademicYears(updated);
     const active = updated.find(y => y.isActive) || updated[0];
     setActiveAcademicYear(active);
+    trackActivity('update_academic_year', 'system', `Eğitim-öğretim yılı kaydedildi: ${year.name}`);
     showToast(`Eğitim-Öğretim Yılı Güncellendi: ${year.name}`);
   };
 
@@ -205,19 +302,36 @@ export function App() {
     const active = updated.find(y => y.id === yearId);
     if (active) {
       setActiveAcademicYear(active);
+      trackActivity('change_active_year', 'system', `Aktif eğitim-öğretim yılı değiştirildi: ${active.name}`);
       showToast(`Aktif Eğitim-Öğretim Yılı: ${active.name}`);
     }
   };
 
-  // 1. Canlı ve Yerel Verileri Senkronize Et (Gerçek Zamanlı Dinleyiciler)
+  // Rol & Yetki Yönetimi Handlers
+  const handleSaveRolePermissions = async (updated: SystemRolePermissions) => {
+    const saved = await dbService.saveRolePermissions(updated);
+    setRolePermissions(saved);
+    trackActivity('update_permissions', 'system', 'Rol yetki matrisi güncellendi.');
+    showToast('Rol ve yetki yapılandırması başarıyla kaydedildi.');
+  };
+
+  const handleResetRolePermissions = async () => {
+    const reset = await dbService.resetRolePermissionsToDefault();
+    setRolePermissions(reset);
+    trackActivity('update_permissions', 'system', 'Rol yetkileri kurumsal varsayılan ayarlara sıfırlandı.');
+    showToast('Rol yetkileri kurumsal varsayılan ayarlara sıfırlandı.');
+  };
+
+  // 1. Canlı ve Yerel Verileri Senkronize Et (Gerçek Zamanlı Dinleyiciler & Firestore Önbellek)
   useEffect(() => {
     let unsubscribeAuth: (() => void) | undefined;
     let unsubscribeProjects: (() => void) | undefined;
     let unsubscribeCurr: (() => void) | undefined;
     let unsubscribeMetrics: (() => void) | undefined;
+    let unsubscribePerms: (() => void) | undefined;
 
     const loadData = async () => {
-      // Profilleri çek
+      // Profilleri çek (Yerel IndexedDB önbelleği veya Firestore)
       try {
         const liveProfiles = await dbService.getProfiles();
         if (liveProfiles && liveProfiles.length > 0) {
@@ -244,6 +358,16 @@ export function App() {
         console.warn('Eğitim yılları yüklenemedi:', err);
       }
 
+      // Rol & Yetki Matrisini Çek
+      try {
+        const livePerms = await dbService.getRolePermissions();
+        if (livePerms) {
+          setRolePermissions(livePerms);
+        }
+      } catch (err) {
+        console.warn('Rol yetkileri yüklenemedi:', err);
+      }
+
       if (isFirebaseConfigured) {
         try {
           if (auth) {
@@ -263,23 +387,8 @@ export function App() {
             });
           }
 
-          // İlk Yükleme
-          const { data: liveProjects } = await dbService.getProjects();
-          if (liveProjects && liveProjects.length > 0) {
-            setProjects(liveProjects);
-          }
-
-          const liveCurr = await dbService.getCurriculums();
-          if (liveCurr && liveCurr.length > 0) {
-            setCurriculums(liveCurr);
-          }
-
-          const liveMet = await dbService.getCampusMetrics();
-          if (liveMet !== undefined && liveMet !== null) {
-            setMetrics(liveMet);
-          }
-
-          // Gerçek Zamanlı Dinleyiciler (Firestore onSnapshot)
+          // Gerçek Zamanlı Dinleyiciler (Firestore persistentLocalCache sayesinde ilk tick IndexedDB'den anında gelir)
+          // Çift okuma (getDocs + onSnapshot) kaldırıldı; okuma tasarrufu sağlandı.
           unsubscribeProjects = dbService.subscribeToProjects((liveList, isRemote) => {
             if (liveList) {
               setProjects(liveList);
@@ -307,8 +416,14 @@ export function App() {
             }
           });
 
+          unsubscribePerms = dbService.subscribeToRolePermissions((livePerms) => {
+            if (livePerms) {
+              setRolePermissions(livePerms);
+            }
+          });
+
         } catch (e) {
-          console.error('Veri yükleme veya dinleyici hatası:', e);
+          console.error('Veri dinleyici hatası:', e);
         }
       }
     };
@@ -320,9 +435,70 @@ export function App() {
       if (unsubscribeProjects) unsubscribeProjects();
       if (unsubscribeCurr) unsubscribeCurr();
       if (unsubscribeMetrics) unsubscribeMetrics();
+      if (unsubscribePerms) unsubscribePerms();
       if (liveUpdateTimerRef.current) clearTimeout(liveUpdateTimerRef.current);
     };
   }, []);
+
+  // Aktivite Günlükleri Dinleyicisi - SADECE Süper Admin Erkan Sağnak için çalışır (Öğretmenler için 0 okuma tasarrufu)
+  useEffect(() => {
+    if (!isSuperAdminEmail(authUser?.email)) {
+      return;
+    }
+
+    let unsubLogs: (() => void) | undefined;
+    const fetchAdminLogs = async () => {
+      try {
+        const liveLogs = await dbService.getActivityLogs();
+        if (liveLogs && liveLogs.length > 0) {
+          setActivityLogs(liveLogs);
+        }
+      } catch (err) {
+        console.warn('Aktivite logları yüklenemedi:', err);
+      }
+
+      if (isFirebaseConfigured) {
+        unsubLogs = dbService.subscribeToActivityLogs((liveLogs) => {
+          if (liveLogs) {
+            setActivityLogs(liveLogs);
+          }
+        });
+      }
+    };
+
+    fetchAdminLogs();
+
+    return () => {
+      if (unsubLogs) unsubLogs();
+    };
+  }, [authUser?.email]);
+
+  // Rol Yetkisi Değiştiğinde Güvenli Sekme Doğrulaması
+  useEffect(() => {
+    const isSimulating = (isSuperAdminEmail(authUser?.email) || authUser?.role === 'admin') && currentRole !== 'coordinator';
+    const effectiveEmail = isSimulating ? currentUser.email : (authUser?.email || currentUser.email);
+    const effectiveIsAdmin = isSuperAdminEmail(effectiveEmail) || currentUser.role === 'admin';
+
+    // Güvenlik: Aktivite Günlüğü SADECE Süper Admin Erkan Sağnak'a açıktır
+    if (currentTab === 'logs') {
+      if (!isSuperAdminEmail(effectiveEmail)) {
+        setCurrentTab('dashboard');
+        return;
+      }
+    }
+
+    const roleConfig = rolePermissions[currentRole];
+    if (roleConfig && !roleConfig.allowedTabs.includes(currentTab as any)) {
+      if (currentTab === 'users' && effectiveIsAdmin) {
+        return;
+      }
+      if (currentTab === 'logs' && isSuperAdminEmail(effectiveEmail)) {
+        return;
+      }
+      const fallbackTab = roleConfig.allowedTabs[0] || 'dashboard';
+      setCurrentTab(fallbackTab);
+    }
+  }, [currentRole, currentTab, rolePermissions, authUser, currentUser]);
 
   // Onay Bekleyen Sayısı
   const pendingCount = projects.filter(p => {
@@ -343,6 +519,7 @@ export function App() {
 
     setProjects(prev => [newProject, ...prev]);
     showToast(`"${newProject.title}" oluşturuldu ve ${currentUser.title}'na onaya sevk edildi.`);
+    trackActivity('create_project', 'projects', `Yeni proje önerildi: "${newProject.title}"`, { projectId: tempId, title: newProject.title, dept: newProject.departmentId });
 
     await dbService.createProject({
       ...newProjectData,
@@ -400,8 +577,10 @@ export function App() {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
     if (updates.status === 'submitted') {
       showToast('Proje başvurusu güncellendi ve bölüm başkanına onaya gönderildi.');
+      trackActivity('submit_project', 'projects', `Proje onaya sevk edildi: "${target?.title || projectId}"`, { projectId });
     } else {
       showToast('Proje taslağı başarıyla güncellendi.');
+      trackActivity('update_project', 'projects', `Proje taslağı güncellendi: "${target?.title || projectId}"`, { projectId });
     }
     await dbService.updateProject(projectId, updates);
   };
@@ -414,6 +593,7 @@ export function App() {
     const canDelete = 
       currentUser.role === 'coordinator' || 
       currentUser.role === 'admin' || 
+      currentUser.role === 'principal' ||
       isSuperAdminEmail(currentUser.email) ||
       (target?.advisorId === currentUser.id && (target?.status === 'draft' || target?.status === 'submitted'));
 
@@ -424,6 +604,7 @@ export function App() {
 
     setProjects(prev => prev.filter(p => p.id !== projectId));
     showToast(`"${title}" başarıyla silindi.`);
+    trackActivity('delete_project', 'projects', `Proje sistemden silindi: "${title}"`, { projectId, title });
     await dbService.deleteProject(projectId);
   };
 
@@ -461,6 +642,14 @@ export function App() {
     }));
 
     await dbService.updateProjectStatus(projectId, newStatus, feedback);
+
+    const statusLabels: Record<string, string> = {
+      dept_approved: 'Bölüm Başkanı Onayladı',
+      coordinator_approved: 'Koordinatör Onayladı (Resmi Yayında)',
+      revision_needed: 'Revizyon İstendi',
+      submitted: 'Onaya Gönderildi',
+    };
+    trackActivity('approve_project', 'projects', `Proje onay durumu değiştirildi: "${target?.title || projectId}" (${statusLabels[newStatus] || newStatus})`, { projectId, newStatus, feedback });
 
     if (newStatus === 'dept_approved') {
       showToast(`${currentUser.name} tarafından onaylandı ve Koordinatöre iletildi.`);
@@ -512,6 +701,7 @@ export function App() {
     }));
 
     await dbService.saveImpactReport(projectId, reportData);
+    trackActivity('submit_impact_report', 'projects', `Etkinlik etki ve kapanış raporu tamamlandı: "${target?.title || projectId}"`, { projectId });
     showToast('Etkinlik etki raporu kaydedildi ve arşive eklendi!');
   };
 
@@ -523,6 +713,7 @@ export function App() {
     };
     setCurriculums(prev => [newEntry, ...prev]);
     await dbService.createCurriculum(newItem);
+    trackActivity('create_curriculum', 'curriculum', `Müfredat kazanımı eklendi: ${newEntry.courseName} - ${newEntry.gradeLevel || 'Genel'} (${newEntry.learningOutcome || ''})`, { courseName: newEntry.courseName });
     showToast(`"${newEntry.courseName}" dersi sürdürülebilirlik matrisine eklendi.`);
   };
 
@@ -550,6 +741,7 @@ export function App() {
 
     setCurriculums(prev => prev.map(c => c.id === curriculumId ? { ...c, ...updates } : c));
     await dbService.updateCurriculum(curriculumId, updates);
+    trackActivity('update_curriculum', 'curriculum', `Ders kazanım eşleştirmesi güncellendi: "${target?.courseName || curriculumId}"`, { curriculumId });
     showToast('Ders kazanım eşleştirmesi güncellendi.');
   };
 
@@ -574,6 +766,7 @@ export function App() {
 
     setCurriculums(prev => prev.filter(c => c.id !== curriculumId));
     await dbService.deleteCurriculum(curriculumId);
+    trackActivity('delete_curriculum', 'curriculum', `Ders kazanım eşleştirmesi silindi: "${target?.courseName || curriculumId}"`, { curriculumId });
     showToast('Ders kazanım eşleştirmesi silindi.');
   };
 
@@ -598,6 +791,7 @@ export function App() {
       return [...prev, newEntry];
     });
     await dbService.createCampusMetric(newEntry, newId);
+    trackActivity('create_metric', 'metrics', `Yeni kampüs göstergesi girildi: ${newEntry.period} Dönemi`, { period: newEntry.period });
     showToast(`${newEntry.period} dönemi tüketim verileri işlendi.`);
   };
 
@@ -612,6 +806,7 @@ export function App() {
     };
     setMetrics(prev => prev.map(m => (m.id === metricWithAudit.id || m.period === metricWithAudit.period) ? metricWithAudit : m));
     await dbService.updateCampusMetric(metricWithAudit);
+    trackActivity('update_metric', 'metrics', `Kampüs göstergesi güncellendi: ${metricWithAudit.period} Dönemi`, { period: metricWithAudit.period });
     showToast(`${metricWithAudit.period} dönemi tüketim verileri güncellendi.`);
   };
 
@@ -619,6 +814,7 @@ export function App() {
   const handleDeleteCampusMetric = async (metricId: string) => {
     setMetrics(prev => prev.filter(m => m.id !== metricId));
     await dbService.deleteCampusMetric(metricId);
+    trackActivity('delete_metric', 'metrics', `Kampüs göstergesi kaydı silindi: ${metricId}`, { metricId });
     showToast('Dönem tüketim verisi silindi.');
   };
 
@@ -626,6 +822,7 @@ export function App() {
   const handleClearCampusMetrics = async () => {
     setMetrics([]);
     await dbService.clearCampusMetrics();
+    trackActivity('clear_metrics', 'metrics', 'Tüm kampüs göstergeleri ve atık verileri sıfırlandı.');
     showToast('Tüm kampüs tüketim ve atık verileri temizlendi.');
   };
 
@@ -721,21 +918,26 @@ export function App() {
         onSaveAcademicYear={handleSaveAcademicYear}
         onSetActiveAcademicYear={handleSetActiveAcademicYear}
         hasLiveUpdate={hasLiveUpdate}
+        isOnline={isOnline}
+        isPwaInstallable={isPwaInstallable}
+        onPromptInstall={() => pwaManager.promptInstall()}
       />
 
       {/* Ana Gövde */}
-      <div className="flex-1 flex flex-col lg:flex-row max-w-7xl w-full mx-auto">
+      <div className="flex-1 flex flex-col lg:flex-row max-w-[1440px] w-full mx-auto px-2 sm:px-4 lg:px-6">
         {/* Yan Menü */}
         <Sidebar 
           currentTab={currentTab}
           onTabChange={setCurrentTab}
           pendingCount={pendingCount}
           userRole={currentRole}
-          currentUserEmail={authUser?.email}
+          currentUserEmail={currentUser.email}
+          currentUser={currentUser}
+          rolePermissions={rolePermissions}
         />
 
         {/* Ana İçerik Alanı */}
-        <main className="flex-1 p-4 lg:p-8 space-y-6 min-w-0 overflow-x-hidden">
+        <main className="flex-1 p-4 lg:p-6 space-y-6 min-w-0 overflow-x-hidden">
           {/* SEKME 1: BİREYSEL VEYA GENEL GÖSTERGE PANELİ */}
           {currentTab === 'dashboard' && (
             currentUser.role === 'teacher' || currentUser.role === 'dept_head' ? (
@@ -846,6 +1048,7 @@ export function App() {
               onClearSdgFilter={() => setSelectedSdgFilter(null)}
               onNavigateTab={setCurrentTab}
               activeAcademicYear={activeAcademicYear}
+              rolePermissions={rolePermissions}
             />
           )}
 
@@ -867,6 +1070,8 @@ export function App() {
               onDeleteCurriculum={handleDeleteCurriculum}
               currentUser={currentUser}
               activeAcademicYear={activeAcademicYear}
+              academicYears={academicYears}
+              rolePermissions={rolePermissions}
             />
           )}
 
@@ -880,6 +1085,7 @@ export function App() {
               onClearMetrics={handleClearCampusMetrics}
               currentUser={currentUser}
               activeAcademicYear={activeAcademicYear}
+              rolePermissions={rolePermissions}
             />
           )}
 
@@ -894,13 +1100,30 @@ export function App() {
           )}
 
           {/* SEKME 7: KULLANICI & ROL YÖNETİMİ */}
-          {currentTab === 'users' && (isSuperAdminEmail(authUser?.email) || authUser?.role === 'admin') && (
+          {currentTab === 'users' && (isSuperAdminEmail(currentUser.email) || currentUser.role === 'admin' || rolePermissions[currentRole]?.allowedTabs.includes('users')) && (
             <UserManagementView 
               profiles={profiles}
               onAddProfile={handleAddProfile}
               onUpdateProfile={handleUpdateProfile}
               onDeleteProfile={handleDeleteProfile}
               currentUser={currentUser}
+              rolePermissions={rolePermissions}
+              onSaveRolePermissions={handleSaveRolePermissions}
+              onResetRolePermissions={handleResetRolePermissions}
+            />
+          )}
+
+          {/* SEKME 8: AKTİVİTE & DENETİM GÜNLÜĞÜ (SADECE SÜPER ADMİN - ERKAN SAĞNAK) */}
+          {currentTab === 'logs' && isSuperAdminEmail(currentUser.email) && (
+            <ActivityLogsView 
+              logs={activityLogs}
+              currentUser={currentUser}
+              onClearLogs={async () => {
+                await dbService.clearActivityLogs();
+                setActivityLogs([]);
+                showToast('Aktivite ve denetim günlüğü temizlendi.');
+                trackActivity('clear_logs', 'system', 'Tüm denetim logları süper admin tarafından temizlendi.');
+              }}
             />
           )}
         </main>

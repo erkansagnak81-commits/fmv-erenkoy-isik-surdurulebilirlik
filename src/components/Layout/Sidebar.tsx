@@ -8,10 +8,12 @@ import {
   FileBadge,
   Sparkles,
   Users,
-  FolderKanban
+  FolderKanban,
+  Activity
 } from 'lucide-react';
-import { UserRole } from '../../types';
+import { UserRole, AppTab, SystemRolePermissions, UserProfile } from '../../types';
 import { isSuperAdminEmail } from '../../constants';
+import { hasUserActionPermission } from '../../constants/permissions';
 
 interface SidebarProps {
   currentTab: string;
@@ -19,6 +21,8 @@ interface SidebarProps {
   pendingCount: number;
   userRole: UserRole;
   currentUserEmail?: string;
+  currentUser?: UserProfile;
+  rolePermissions?: SystemRolePermissions;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -27,12 +31,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   pendingCount,
   userRole,
   currentUserEmail,
+  currentUser,
+  rolePermissions,
 }) => {
-  const isSuperAdmin = isSuperAdminEmail(currentUserEmail) || userRole === 'admin';
+  const isSuperAdmin = isSuperAdminEmail(currentUser?.email || currentUserEmail) || userRole === 'admin';
 
   const getDashboardLabel = () => {
     if (userRole === 'teacher') return 'Bireysel Panelim';
     if (userRole === 'dept_head') return 'Zümre Paneli';
+    if (userRole === 'principal') return 'Okul Yönetim Paneli';
     return 'Genel Gösterge Paneli';
   };
 
@@ -41,58 +48,83 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'dashboard',
       label: getDashboardLabel(),
       icon: LayoutDashboard,
-      roles: ['teacher', 'dept_head', 'coordinator', 'admin'],
+      roles: ['teacher', 'dept_head', 'coordinator', 'principal', 'admin'],
     },
     {
       id: 'calendar',
       label: 'Okul Takvimi',
       icon: CalendarDays,
-      roles: ['teacher', 'dept_head', 'coordinator', 'admin'],
+      roles: ['teacher', 'dept_head', 'coordinator', 'principal', 'admin'],
     },
     {
       id: 'projects',
       label: 'Proje & Etkinlik Havuzu',
       icon: FolderKanban,
-      roles: ['teacher', 'dept_head', 'coordinator', 'admin'],
+      roles: ['teacher', 'dept_head', 'coordinator', 'principal', 'admin'],
     },
     {
       id: 'approvals',
       label: 'Onay Masası',
       icon: CheckSquare,
       badge: pendingCount,
-      roles: ['dept_head', 'coordinator', 'admin'], // Teachers don't need approval queue
+      roles: ['dept_head', 'coordinator', 'principal', 'admin'], // Teachers don't need approval queue
     },
     {
       id: 'curriculum',
       label: 'Müfredat & SKA Matrisi',
       icon: BookOpenCheck,
-      roles: ['teacher', 'dept_head', 'coordinator', 'admin'],
+      roles: ['teacher', 'dept_head', 'coordinator', 'principal', 'admin'],
     },
     {
       id: 'campus',
       label: 'Yeşil Kampüs Metrikleri',
       icon: BarChart3,
-      roles: ['teacher', 'dept_head', 'coordinator', 'admin'],
+      roles: ['teacher', 'dept_head', 'coordinator', 'principal', 'admin'],
     },
     {
       id: 'reports',
       label: 'Sürdürülebilirlik & Akreditasyon',
       icon: FileBadge,
-      roles: ['teacher', 'dept_head', 'coordinator', 'admin'],
+      roles: ['teacher', 'dept_head', 'coordinator', 'principal', 'admin'],
     },
     {
       id: 'users',
       label: 'Kullanıcı & Rol Yönetimi',
       icon: Users,
+      roles: ['coordinator', 'principal', 'admin'],
+      superAdminOnly: true,
+    },
+    {
+      id: 'logs',
+      label: 'Aktivite & Denetim Günlüğü',
+      icon: Activity,
       roles: ['coordinator', 'admin'],
       superAdminOnly: true,
     },
   ];
 
+  const roleConfig = rolePermissions ? rolePermissions[userRole] : null;
+
   const filteredItems = menuItems.filter(item => {
-    if (item.id === 'users') {
-      return isSuperAdmin;
+    if (item.id === 'logs') {
+      return Boolean(isSuperAdminEmail(currentUser?.email || currentUserEmail));
     }
+
+    if (item.id === 'users') {
+      if (isSuperAdmin) return true;
+      return roleConfig ? roleConfig.allowedTabs.includes('users') : false;
+    }
+
+    if (item.id === 'campus' && currentUser && rolePermissions) {
+      if (hasUserActionPermission(currentUser, 'canEditCampusMetrics', rolePermissions)) {
+        return true;
+      }
+    }
+
+    if (roleConfig) {
+      return roleConfig.allowedTabs.includes(item.id as AppTab);
+    }
+
     return item.roles.includes(userRole);
   });
 
@@ -140,12 +172,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {userRole === 'teacher' && 'Öğretmen / Danışman Yetkisi'}
               {userRole === 'dept_head' && 'Bölüm Başkanı Yetkisi'}
               {userRole === 'coordinator' && 'Koordinatör / Genel Yönetici'}
+              {userRole === 'principal' && 'Okul Müdürü / Üst Yönetim'}
             </span>
           </div>
           <p className="text-[11px] text-slate-600 leading-relaxed">
             {userRole === 'teacher' && 'Yeni projeler önerin, onaylanan etkinliklerinizi gerçekleştirip etki raporlarını sisteme işleyin.'}
             {userRole === 'dept_head' && 'Zümrenizden gelen projeleri değerlendirin, revizyon isteyin veya koordinatör onayına sevk edin.'}
             {userRole === 'coordinator' && 'Okul genelindeki tüm sürdürülebilirlik faaliyetlerini, SKA dağılımını ve tüketim verilerini kontrol edin.'}
+            {userRole === 'principal' && 'Okul genelindeki tüm sürdürülebilirlik projelerini, onay bekleyen etkinlikleri, müfredat çalışmalarını ve resmi raporları üst düzey yönetici olarak denetleyin.'}
           </p>
         </div>
       </div>

@@ -2,13 +2,15 @@ import { db, auth, googleProvider, isFirebaseConfigured } from './firebase';
 import { 
   collection, 
   getDocs, 
+  getDoc,
   doc, 
   setDoc, 
   updateDoc, 
   deleteDoc, 
   query, 
   orderBy,
-  onSnapshot
+  onSnapshot,
+  limit
 } from 'firebase/firestore';
 import { signInWithPopup, signOut } from 'firebase/auth';
 import { 
@@ -18,7 +20,9 @@ import {
   ProjectStatus, 
   ImpactReport, 
   UserProfile,
-  AcademicYear 
+  AcademicYear,
+  SystemRolePermissions,
+  ActivityLog
 } from '../types';
 import { 
   INITIAL_PROJECTS, 
@@ -26,6 +30,7 @@ import {
   INITIAL_CAMPUS_METRICS, 
   INITIAL_PROFILES 
 } from '../data/initialData';
+import { DEFAULT_ROLE_PERMISSIONS } from '../constants/permissions';
 
 export const INITIAL_ACADEMIC_YEARS: AcademicYear[] = [
   {
@@ -62,6 +67,61 @@ const PROJECTS_STORAGE_KEY = 'ecocampus_projects_v2';
 const CURRICULUM_STORAGE_KEY = 'ecocampus_curriculums_v2';
 const METRICS_STORAGE_KEY = 'ecocampus_metrics_v2';
 const ACADEMIC_YEARS_STORAGE_KEY = 'ecocampus_academic_years_v1';
+const ROLE_PERMISSIONS_STORAGE_KEY = 'ecocampus_role_permissions_v1';
+const ACTIVITY_LOGS_STORAGE_KEY = 'ecocampus_activity_logs_v1';
+
+function getLocalActivityLogs(): ActivityLog[] {
+  try {
+    const raw = localStorage.getItem(ACTIVITY_LOGS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Error reading local activity logs', e);
+  }
+  return [];
+}
+
+function saveLocalActivityLogs(logs: ActivityLog[]): void {
+  try {
+    // Son 1000 logu sakla
+    const trimmed = logs.slice(0, 1000);
+    localStorage.setItem(ACTIVITY_LOGS_STORAGE_KEY, JSON.stringify(trimmed));
+  } catch (e) {
+    console.error('Error saving local activity logs', e);
+  }
+}
+
+function getLocalRolePermissions(): SystemRolePermissions {
+  try {
+    const raw = localStorage.getItem(ROLE_PERMISSIONS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && parsed.coordinator && parsed.teacher) {
+        return {
+          ...DEFAULT_ROLE_PERMISSIONS,
+          ...parsed,
+          principal: parsed.principal || DEFAULT_ROLE_PERMISSIONS.principal,
+        };
+      }
+    }
+  } catch (e) {
+    console.error('Error reading local role permissions', e);
+  }
+  saveLocalRolePermissions(DEFAULT_ROLE_PERMISSIONS);
+  return DEFAULT_ROLE_PERMISSIONS;
+}
+
+function saveLocalRolePermissions(perms: SystemRolePermissions): void {
+  try {
+    localStorage.setItem(ROLE_PERMISSIONS_STORAGE_KEY, JSON.stringify(perms));
+  } catch (e) {
+    console.error('Error saving local role permissions', e);
+  }
+}
 
 function getLocalAcademicYears(): AcademicYear[] {
   try {
@@ -117,41 +177,10 @@ function saveLocalProfiles(profiles: UserProfile[]): void {
 function getLocalProjects(): ProjectEvent[] {
   try {
     const raw = localStorage.getItem(PROJECTS_STORAGE_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // Eski yerel verideki başlangıç projelerinin tarihlerini 2026-2027 eğitim yılına güncelle ve eksik projeleri ekle
-        let needsSave = false;
-        const initialMap = new Map(INITIAL_PROJECTS.map(p => [p.id, p]));
-        
-        const updatedList = parsed.map((p: ProjectEvent) => {
-          const initP = initialMap.get(p.id);
-          // Eğer başlangıç projelerinden biriyse ve tarihi aktif eğitim yılı (2026-09-08) öncesinde kalmışsa güncelle
-          if (initP && p.startDate < '2026-09-08') {
-            needsSave = true;
-            return {
-              ...p,
-              startDate: initP.startDate,
-              endDate: initP.endDate || initP.startDate,
-              createdAt: initP.createdAt,
-            };
-          }
-          return p;
-        });
-
-        // Başlangıç listesindeki yeni/eksik projeleri ekle
-        const existingIds = new Set(updatedList.map((p: ProjectEvent) => p.id));
-        for (const initP of INITIAL_PROJECTS) {
-          if (!existingIds.has(initP.id)) {
-            updatedList.push(initP);
-            needsSave = true;
-          }
-        }
-
-        if (needsSave) {
-          saveLocalProjects(updatedList);
-        }
-        return updatedList;
+      if (Array.isArray(parsed)) {
+        return parsed;
       }
     }
   } catch (e) {
@@ -172,9 +201,9 @@ function saveLocalProjects(projects: ProjectEvent[]): void {
 function getLocalCurriculums(): CurriculumIntegration[] {
   try {
     const raw = localStorage.getItem(CURRICULUM_STORAGE_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.error('Error reading local curriculums', e);
@@ -225,6 +254,8 @@ export const dbService = {
   saveLocalCampusMetrics,
   getLocalProfiles,
   saveLocalProfiles,
+  getLocalActivityLogs,
+  saveLocalActivityLogs,
 
   // 1. PROJELERİ GETİR
   async getProjects(): Promise<{ data: ProjectEvent[]; fromLive: boolean }> {
@@ -239,13 +270,8 @@ export const dbService = {
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
-        // Firestore koleksiyonu boş ise başlangıç/yerel projeleri Firestore'a tohumlayalım
-        for (const p of locals) {
-          try {
-            await setDoc(doc(db, 'projects_events', p.id), p);
-          } catch {}
-        }
-        return { data: locals, fromLive: true };
+        saveLocalProjects([]);
+        return { data: [], fromLive: true };
       }
 
       const remoteProjects: ProjectEvent[] = snapshot.docs.map(docSnap => ({
@@ -416,12 +442,8 @@ export const dbService = {
     try {
       const snapshot = await getDocs(collection(db, 'curriculum_integrations'));
       if (snapshot.empty) {
-        for (const c of locals) {
-          try {
-            await setDoc(doc(db, 'curriculum_integrations', c.id), c);
-          } catch {}
-        }
-        return locals;
+        saveLocalCurriculums([]);
+        return [];
       }
 
       const remoteCurr: CurriculumIntegration[] = snapshot.docs.map(docSnap => ({
@@ -996,9 +1018,7 @@ export const dbService = {
         snapshot.forEach(docSnap => {
           list.push(docSnap.data() as ProjectEvent);
         });
-        if (list.length > 0) {
-          saveLocalProjects(list);
-        }
+        saveLocalProjects(list);
         const isRemote = !isInitial && !snapshot.metadata.hasPendingWrites;
         isInitial = false;
         callback(list, isRemote);
@@ -1021,9 +1041,7 @@ export const dbService = {
         snapshot.forEach(docSnap => {
           list.push(docSnap.data() as CampusMetric);
         });
-        if (list.length > 0) {
-          saveLocalCampusMetrics(list);
-        }
+        saveLocalCampusMetrics(list);
         const isRemote = !isInitial && !snapshot.metadata.hasPendingWrites;
         isInitial = false;
         callback(list, isRemote);
@@ -1045,9 +1063,7 @@ export const dbService = {
         snapshot.forEach(docSnap => {
           list.push(docSnap.data() as CurriculumIntegration);
         });
-        if (list.length > 0) {
-          saveLocalCurriculums(list);
-        }
+        saveLocalCurriculums(list);
         const isRemote = !isInitial && !snapshot.metadata.hasPendingWrites;
         isInitial = false;
         callback(list, isRemote);
@@ -1058,6 +1074,164 @@ export const dbService = {
       console.warn('Could not subscribe to curriculums:', e);
       return () => {};
     }
+  },
+
+  // 14. ROL & YETKİ KONTROL PANELİ İZİNLERİ
+  getLocalRolePermissions(): SystemRolePermissions {
+    return getLocalRolePermissions();
+  },
+
+  async getRolePermissions(): Promise<SystemRolePermissions> {
+    if (!isFirebaseConfigured || !db) {
+      return getLocalRolePermissions();
+    }
+    try {
+      const docSnap = await getDoc(doc(db, 'system_settings', 'role_permissions'));
+      if (docSnap.exists()) {
+        const data = docSnap.data() as SystemRolePermissions;
+        const merged: SystemRolePermissions = {
+          ...DEFAULT_ROLE_PERMISSIONS,
+          ...data
+        };
+        saveLocalRolePermissions(merged);
+        return merged;
+      }
+    } catch (e) {
+      console.warn('Firebase getRolePermissions failed, using local storage:', e);
+    }
+    return getLocalRolePermissions();
+  },
+
+  async saveRolePermissions(perms: SystemRolePermissions): Promise<SystemRolePermissions> {
+    saveLocalRolePermissions(perms);
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'system_settings', 'role_permissions'), perms);
+      } catch (e) {
+        console.error('Firebase saveRolePermissions error:', e);
+      }
+    }
+    return perms;
+  },
+
+  async resetRolePermissionsToDefault(): Promise<SystemRolePermissions> {
+    return this.saveRolePermissions(DEFAULT_ROLE_PERMISSIONS);
+  },
+
+  subscribeToRolePermissions(callback: (perms: SystemRolePermissions) => void): () => void {
+    if (!isFirebaseConfigured || !db) return () => {};
+    try {
+      return onSnapshot(doc(db, 'system_settings', 'role_permissions'), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data() as SystemRolePermissions;
+          const merged: SystemRolePermissions = {
+            ...DEFAULT_ROLE_PERMISSIONS,
+            ...data
+          };
+          saveLocalRolePermissions(merged);
+          callback(merged);
+        }
+      }, (err) => {
+        console.warn('Role permissions snapshot subscription error:', err);
+      });
+    } catch (e) {
+      console.warn('Could not subscribe to role permissions:', e);
+      return () => {};
+    }
+  },
+
+  // ----------------- AKTİVİTE & GÜVENLİK GÜNLÜĞÜ (AUDIT LOGS) -----------------
+  async logActivity(entry: Omit<ActivityLog, 'id' | 'timestamp'>): Promise<ActivityLog> {
+    const timestamp = new Date().toISOString();
+    const id = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const fullLog: ActivityLog = {
+      ...entry,
+      id,
+      timestamp,
+    };
+
+    // 1. Yerel Depolamaya Kaydet
+    const local = getLocalActivityLogs();
+    saveLocalActivityLogs([fullLog, ...local]);
+
+    // 2. Firebase Firestore'a Kaydet
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'activity_logs', id), fullLog);
+      } catch (e) {
+        console.warn('Firebase logActivity error (saved to localStorage):', e);
+      }
+    }
+
+    return fullLog;
+  },
+
+  async getActivityLogs(limitCount: number = 200): Promise<ActivityLog[]> {
+    if (!isFirebaseConfigured || !db) {
+      return getLocalActivityLogs().slice(0, limitCount);
+    }
+    try {
+      const q = query(
+        collection(db, 'activity_logs'),
+        orderBy('timestamp', 'desc'),
+        limit(limitCount)
+      );
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const firestoreLogs = snapshot.docs.map(d => d.data() as ActivityLog);
+        saveLocalActivityLogs(firestoreLogs);
+        return firestoreLogs;
+      }
+    } catch (e) {
+      console.warn('Firebase getActivityLogs failed, using local logs:', e);
+    }
+    return getLocalActivityLogs().slice(0, limitCount);
+  },
+
+  subscribeToActivityLogs(callback: (logs: ActivityLog[]) => void, limitCount: number = 200): () => void {
+    if (!isFirebaseConfigured || !db) {
+      callback(getLocalActivityLogs().slice(0, limitCount));
+      return () => {};
+    }
+    try {
+      const q = query(
+        collection(db, 'activity_logs'),
+        orderBy('timestamp', 'desc'),
+        limit(limitCount)
+      );
+      return onSnapshot(q, (snapshot) => {
+        if (!snapshot.empty) {
+          const liveLogs = snapshot.docs.map(d => d.data() as ActivityLog);
+          saveLocalActivityLogs(liveLogs);
+          callback(liveLogs);
+        } else {
+          callback(getLocalActivityLogs().slice(0, limitCount));
+        }
+      }, (err) => {
+        console.warn('Activity logs snapshot subscription error:', err);
+        callback(getLocalActivityLogs().slice(0, limitCount));
+      });
+    } catch (e) {
+      console.warn('Could not subscribe to activity logs:', e);
+      callback(getLocalActivityLogs().slice(0, limitCount));
+      return () => {};
+    }
+  },
+
+  async clearActivityLogs(): Promise<boolean> {
+    saveLocalActivityLogs([]);
+    if (isFirebaseConfigured && db) {
+      try {
+        const q = query(collection(db, 'activity_logs'), limit(300));
+        const snapshot = await getDocs(q);
+        const batchDeletes = snapshot.docs.map(d => deleteDoc(doc(db, 'activity_logs', d.id)));
+        await Promise.all(batchDeletes);
+        return true;
+      } catch (e) {
+        console.error('Firebase clearActivityLogs error:', e);
+      }
+    }
+    return true;
   }
 };
 
