@@ -152,7 +152,7 @@ function getLocalProfiles(): UserProfile[] {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed.map((p: UserProfile) => {
-          if (p.role === 'coordinator' || p.role === 'admin') {
+          if (p.role === 'coordinator' || p.role === 'admin' || p.role === 'principal') {
             return { ...p, departmentId: '' };
           }
           return p;
@@ -651,10 +651,15 @@ export const dbService = {
         return locals;
       }
 
-      const profiles: UserProfile[] = snapshot.docs.map(docSnap => ({
-        ...(docSnap.data() as UserProfile),
-        id: docSnap.id,
-      }));
+      const profiles: UserProfile[] = snapshot.docs.map(docSnap => {
+        const p = docSnap.data() as UserProfile;
+        const isSchoolWide = p.role === 'coordinator' || p.role === 'admin' || p.role === 'principal';
+        return {
+          ...p,
+          id: docSnap.id,
+          departmentId: isSchoolWide ? '' : (p.departmentId || ''),
+        };
+      });
 
       // Yerelde olup henüz Firestore'a yansımamış kullanıcıları koru ve Firestore'a senkronize et
       const locals = getLocalProfiles();

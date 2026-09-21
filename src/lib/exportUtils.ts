@@ -322,7 +322,13 @@ export function exportLogsToCsv(logs: ActivityLog[], departments: Department[] =
   };
 
   const rows = logs.map(log => {
-    const deptName = log.departmentId ? (deptMap.get(log.departmentId) || log.departmentId) : '—';
+    const isSchoolWide = log.userRole === 'coordinator' || log.userRole === 'admin';
+    const isPrincipal = log.userRole === 'principal';
+    const deptName = isSchoolWide 
+      ? 'Okul Geneli' 
+      : isPrincipal 
+      ? 'Okul Yönetimi' 
+      : (log.departmentId ? (deptMap.get(log.departmentId) || log.departmentId) : '—');
     const role = roleLabels[log.userRole] || log.userRole;
     const cat = categoryLabels[log.category] || log.category;
     

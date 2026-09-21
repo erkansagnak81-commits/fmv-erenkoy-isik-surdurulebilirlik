@@ -68,8 +68,11 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({
       }
 
       // Zümre Filtresi
-      if (departmentFilter !== 'all' && log.departmentId !== departmentFilter) {
-        return false;
+      if (departmentFilter !== 'all') {
+        const isSchoolWide = log.userRole === 'coordinator' || log.userRole === 'admin' || log.userRole === 'principal';
+        if (isSchoolWide || log.departmentId !== departmentFilter) {
+          return false;
+        }
       }
 
       // Tarih Filtresi
@@ -102,7 +105,8 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({
     // En Aktif Zümre
     const deptCounts: Record<string, number> = {};
     logs.forEach(l => {
-      if (l.departmentId) {
+      const isSchoolWide = l.userRole === 'coordinator' || l.userRole === 'admin' || l.userRole === 'principal';
+      if (l.departmentId && !isSchoolWide) {
         deptCounts[l.departmentId] = (deptCounts[l.departmentId] || 0) + 1;
       }
     });
@@ -457,7 +461,13 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({
                   const logDate = new Date(log.timestamp);
                   const dateStr = logDate.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                   const timeStr = logDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                  const deptName = log.departmentId ? deptMap.get(log.departmentId) : undefined;
+                  const isSchoolWide = log.userRole === 'coordinator' || log.userRole === 'admin';
+                  const isPrincipal = log.userRole === 'principal';
+                  const deptName = isSchoolWide 
+                    ? 'Okul Geneli' 
+                    : isPrincipal 
+                    ? 'Okul Yönetimi' 
+                    : (log.departmentId ? deptMap.get(log.departmentId) : undefined);
 
                   return (
                     <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
@@ -484,7 +494,7 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = ({
                                 {log.userEmail}
                             </div>
                             {deptName && (
-                              <div className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
+                              <div className={`text-[10px] font-medium truncate mt-0.5 ${isSchoolWide ? 'text-emerald-700 font-semibold' : isPrincipal ? 'text-purple-700 font-semibold' : 'text-slate-500'}`}>
                                 {deptName}
                               </div>
                             )}

@@ -48,7 +48,13 @@ export function App() {
   const [authUser, setAuthUser] = useState<UserProfile | null>(() => {
     try {
       const saved = localStorage.getItem('ecocampus_auth_user');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.role === 'coordinator' || parsed.role === 'admin' || parsed.role === 'principal')) {
+          parsed.departmentId = '';
+        }
+        return parsed;
+      }
     } catch {
       // ignore
     }
@@ -153,12 +159,13 @@ export function App() {
   ) => {
     try {
       const logUser = authUser || currentUser;
+      const isSchoolWide = logUser.role === 'coordinator' || logUser.role === 'admin' || logUser.role === 'principal';
       const created = await dbService.logActivity({
         userId: logUser.id,
         userName: logUser.name,
         userEmail: logUser.email,
         userRole: logUser.role,
-        departmentId: logUser.departmentId,
+        departmentId: isSchoolWide ? '' : (logUser.departmentId || ''),
         actionType,
         category,
         description,
@@ -339,7 +346,11 @@ export function App() {
           setAuthUser(prev => {
             if (!prev) return null;
             const fresh = liveProfiles.find(p => p.email.toLowerCase() === prev.email.toLowerCase());
-            return fresh || prev;
+            const resolved = fresh ? { ...fresh } : { ...prev };
+            if (resolved.role === 'coordinator' || resolved.role === 'admin' || resolved.role === 'principal') {
+              resolved.departmentId = '';
+            }
+            return resolved;
           });
         }
       } catch (err) {
