@@ -14,6 +14,7 @@ export interface Department {
   code: string;
   color: string;
   headName: string;
+  isAcademic?: boolean;
 }
 
 export interface UserProfile {
@@ -27,6 +28,7 @@ export interface UserProfile {
   createdAt?: string;
   status?: 'active' | 'pending';
   customPermissions?: Partial<RoleActionPermissions>;
+  isCasCoordinator?: boolean;
 }
 
 export interface SdgGoal {

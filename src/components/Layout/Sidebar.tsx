@@ -38,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const getDashboardLabel = () => {
     if (userRole === 'teacher') return 'Bireysel Panelim';
-    if (userRole === 'dept_head') return 'Zümre Paneli';
+    if (userRole === 'dept_head') return currentUser?.departmentId === 'dept-cas' ? 'IB DP & CAS Paneli' : 'Zümre Paneli';
     if (userRole === 'principal') return 'Okul Yönetim Paneli';
     return 'Genel Gösterge Paneli';
   };
@@ -170,14 +170,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
             <span>
               {userRole === 'teacher' && 'Öğretmen / Danışman Yetkisi'}
-              {userRole === 'dept_head' && 'Bölüm Başkanı Yetkisi'}
+              {userRole === 'dept_head' && (currentUser?.departmentId === 'dept-cas' ? 'IB DP Koordinatörü Yetkisi' : 'Bölüm Başkanı Yetkisi')}
               {userRole === 'coordinator' && 'Koordinatör / Genel Yönetici'}
               {userRole === 'principal' && 'Okul Müdürü / Üst Yönetim'}
             </span>
           </div>
           <p className="text-[11px] text-slate-600 leading-relaxed">
             {userRole === 'teacher' && 'Yeni projeler önerin, onaylanan etkinliklerinizi gerçekleştirip etki raporlarını sisteme işleyin.'}
-            {userRole === 'dept_head' && 'Zümrenizden gelen projeleri değerlendirin, revizyon isteyin veya koordinatör onayına sevk edin.'}
+            {userRole === 'dept_head' && (
+              currentUser?.departmentId === 'dept-cas'
+                ? 'CAS bünyesinde açılan projeleri değerlendirin, revizyon isteyin veya koordinatör onayına sevk edin.'
+                : 'Zümrenizden gelen projeleri değerlendirin, revizyon isteyin veya koordinatör onayına sevk edin.'
+            )}
             {userRole === 'coordinator' && 'Okul genelindeki tüm sürdürülebilirlik faaliyetlerini, SKA dağılımını ve tüketim verilerini kontrol edin.'}
             {userRole === 'principal' && 'Okul genelindeki tüm sürdürülebilirlik projelerini, onay bekleyen etkinlikleri, müfredat çalışmalarını ve resmi raporları üst düzey yönetici olarak denetleyin.'}
           </p>

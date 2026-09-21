@@ -1,4 +1,6 @@
-import { Department, SdgGoal } from '../types';
+import { Department, SdgGoal, UserProfile } from '../types';
+
+export const CAS_DEPARTMENT_ID = 'dept-cas';
 
 export const SDG_GOALS: SdgGoal[] = [
   { number: 1, name: 'Yoksulluğa Son', shortName: 'Yoksulluğa Son', color: '#E5243B', iconName: 'HandCoins', description: 'Her tür yoksulluğu her yerde sona erdirmek' },
@@ -21,15 +23,26 @@ export const SDG_GOALS: SdgGoal[] = [
 ];
 
 export const DEPARTMENTS: Department[] = [
-  { id: 'dept-fen', name: 'Fen Bilimleri Bölümü', code: 'FEN', color: '#10b981', headName: 'Servet Battal' },
-  { id: 'dept-mat', name: 'Matematik Bölümü', code: 'MAT', color: '#8b5cf6', headName: 'Funda Akbulut Demirel' },
-  { id: 'dept-edb', name: 'Türk Dili ve Edebiyatı', code: 'EDB', color: '#eab308', headName: 'Pınar Usta Altıner' },
-  { id: 'dept-sos', name: 'Sosyal Bilimler', code: 'SOS', color: '#3b82f6', headName: 'Kadir Can Tunay' },
-  { id: 'dept-dil', name: 'Yabancı Diller Bölümü', code: 'DIL', color: '#ec4899', headName: 'Eda Nezihe Üçöz' },
-  { id: 'dept-uyg', name: 'Uygulamalı Dersler', code: 'UYG', color: '#f97316', headName: 'Işıl Zaza Tozlu' },
-  { id: 'dept-bil', name: 'Bilişim Teknolojileri', code: 'BİL', color: '#6366f1', headName: 'Ahmet Salih Taş' },
-  { id: 'dept-pdr', name: 'Rehberlik ve Psikolojik Danışmanlık', code: 'PDR', color: '#06b6d4', headName: 'Özlem Sendan' },
+  { id: 'dept-fen', name: 'Fen Bilimleri Bölümü', code: 'FEN', color: '#10b981', headName: 'Servet Battal', isAcademic: true },
+  { id: 'dept-mat', name: 'Matematik Bölümü', code: 'MAT', color: '#8b5cf6', headName: 'Funda Akbulut Demirel', isAcademic: true },
+  { id: 'dept-edb', name: 'Türk Dili ve Edebiyatı', code: 'EDB', color: '#eab308', headName: 'Pınar Usta Altıner', isAcademic: true },
+  { id: 'dept-sos', name: 'Sosyal Bilimler', code: 'SOS', color: '#3b82f6', headName: 'Kadir Can Tunay', isAcademic: true },
+  { id: 'dept-dil', name: 'Yabancı Diller Bölümü', code: 'DIL', color: '#ec4899', headName: 'Eda Nezihe Üçöz', isAcademic: true },
+  { id: 'dept-uyg', name: 'Uygulamalı Dersler', code: 'UYG', color: '#f97316', headName: 'Işıl Zaza Tozlu', isAcademic: true },
+  { id: 'dept-bil', name: 'Bilişim Teknolojileri', code: 'BİL', color: '#6366f1', headName: 'Ahmet Salih Taş', isAcademic: true },
+  { id: 'dept-pdr', name: 'Rehberlik ve Psikolojik Danışmanlık', code: 'PDR', color: '#06b6d4', headName: 'Özlem Sendan', isAcademic: true },
+  { id: 'dept-cas', name: 'CAS (Creativity, Activity, Service)', code: 'CAS', color: '#d97706', headName: 'IB DP Koordinatörü', isAcademic: false },
 ];
+
+export function isUserCasCoordinator(user?: UserProfile | null): boolean {
+  if (!user) return false;
+  return Boolean(user.isCasCoordinator);
+}
+
+export function isUserIbCoordinator(user?: UserProfile | null): boolean {
+  if (!user) return false;
+  return user.departmentId === CAS_DEPARTMENT_ID;
+}
 
 export const SCHOOL_LEVELS = {
   LISE: {

@@ -186,9 +186,10 @@ export const Header: React.FC<HeaderProps> = ({
                     >
                       {profiles.filter(p => p.role === 'teacher').map(t => {
                         const dept = DEPARTMENTS.find(d => d.id === t.departmentId);
+                        const roleTag = t.isCasCoordinator ? 'CAS Koord.' : (dept?.code || t.title || 'Öğretmen');
                         return (
                           <option key={t.id} value={t.id}>
-                            {t.name} ({dept?.code || t.title || 'Öğretmen'})
+                            {t.name} ({roleTag})
                           </option>
                         );
                       })}
@@ -220,13 +221,17 @@ export const Header: React.FC<HeaderProps> = ({
                         if (d) onDepartmentHeadChange(d);
                       }}
                       className="ml-1 px-1.5 py-1 text-[11px] font-semibold bg-white border border-blue-200 text-blue-900 rounded-md focus:outline-none cursor-pointer"
-                      title="Hangi Bölüm Başkanı olarak incelemek istediğinizi seçin"
+                      title="Hangi Bölüm Başkanı / IB DP Koordinatörü olarak incelemek istediğinizi seçin"
                     >
-                      {DEPARTMENTS.map(d => (
-                        <option key={d.id} value={d.id}>
-                          {d.headName} ({d.code})
-                        </option>
-                      ))}
+                      {DEPARTMENTS.map(d => {
+                        const deptHeadProfile = profiles.find(p => p.departmentId === d.id && p.role === 'dept_head');
+                        const displayName = deptHeadProfile?.name || d.headName;
+                        return (
+                          <option key={d.id} value={d.id}>
+                            {displayName} ({d.code})
+                          </option>
+                        );
+                      })}
                     </select>
                   )}
                 </div>
@@ -276,7 +281,9 @@ export const Header: React.FC<HeaderProps> = ({
                 {currentUser.role === 'principal'
                   ? 'Okul Müdürü'
                   : currentUser.role === 'dept_head'
-                  ? `${DEPARTMENTS.find(d => d.id === currentUser.departmentId)?.name || 'Bölüm Başkanı'}`
+                  ? (currentUser.departmentId === 'dept-cas'
+                      ? 'IB DP Koordinatörü'
+                      : `${DEPARTMENTS.find(d => d.id === currentUser.departmentId)?.name || 'Bölüm Başkanı'}`)
                   : currentUser.role === 'coordinator'
                   ? 'Koordinatör'
                   : 'Danışman Öğretmen'}
@@ -309,7 +316,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </p>
                   {isSimulating && (
                     <span className="text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-bold border border-amber-200">
-                      {currentUser.role === 'principal' ? 'Okul Müdürü' : currentUser.role === 'dept_head' ? 'Bölüm Başkanı' : 'Danışman Öğretmen'}
+                      {currentUser.role === 'principal' ? 'Okul Müdürü' : currentUser.role === 'dept_head' ? (currentUser.departmentId === 'dept-cas' ? 'IB DP Koordinatörü' : 'Bölüm Başkanı') : 'Danışman Öğretmen'}
                     </span>
                   )}
                 </div>

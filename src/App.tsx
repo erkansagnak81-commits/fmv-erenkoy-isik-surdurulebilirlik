@@ -86,7 +86,7 @@ export function App() {
           email: `${targetDept.headName.toLowerCase().replace(/[^a-z]/g, '')}@fmvisik.k12.tr`,
           role: 'dept_head',
           departmentId: targetDept.id,
-          title: `${targetDept.name} Bölüm Başkanı`,
+          title: targetDept.id === 'dept-cas' ? 'IB DP Koordinatörü' : `${targetDept.name} Bölüm Başkanı`,
           avatar: '/logo.png',
         };
       }
@@ -529,7 +529,11 @@ export function App() {
     };
 
     setProjects(prev => [newProject, ...prev]);
-    showToast(`"${newProject.title}" oluşturuldu ve ${currentUser.title}'na onaya sevk edildi.`);
+    const targetDept = DEPARTMENTS.find(d => d.id === newProject.departmentId);
+    const approverName = newProject.departmentId === 'dept-cas'
+      ? 'IB DP Koordinatörlüğü'
+      : (targetDept ? `${targetDept.name} Başkanlığı` : 'Koordinatörlük');
+    showToast(`"${newProject.title}" oluşturuldu ve ${approverName}'ne onaya sevk edildi.`);
     trackActivity('create_project', 'projects', `Yeni proje önerildi: "${newProject.title}"`, { projectId: tempId, title: newProject.title, dept: newProject.departmentId });
 
     await dbService.createProject({
@@ -587,7 +591,10 @@ export function App() {
 
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
     if (updates.status === 'submitted') {
-      showToast('Proje başvurusu güncellendi ve bölüm başkanına onaya gönderildi.');
+      const isCasProject = (target?.departmentId || updates.departmentId) === 'dept-cas';
+      showToast(isCasProject 
+        ? 'Proje başvurusu güncellendi ve IB DP Koordinatörüne onaya gönderildi.' 
+        : 'Proje başvurusu güncellendi ve bölüm başkanına onaya gönderildi.');
       trackActivity('submit_project', 'projects', `Proje onaya sevk edildi: "${target?.title || projectId}"`, { projectId });
     } else {
       showToast('Proje taslağı başarıyla güncellendi.');
@@ -632,7 +639,9 @@ export function App() {
         return;
       }
       if (currentUser.role === 'dept_head' && target.departmentId !== currentUser.departmentId) {
-        showToast('Yetkisiz işlem: Yalnızca kendi zümrenizdeki öğretmenlerin projelerini onaylayabilirsiniz.');
+        showToast(target.departmentId === 'dept-cas'
+          ? 'Yetkisiz işlem: CAS projelerini yalnızca IB DP Koordinatörü onaylayabilir.'
+          : 'Yetkisiz işlem: Yalnızca kendi zümrenizdeki öğretmenlerin projelerini onaylayabilirsiniz.');
         return;
       }
     }
@@ -655,7 +664,7 @@ export function App() {
     await dbService.updateProjectStatus(projectId, newStatus, feedback);
 
     const statusLabels: Record<string, string> = {
-      dept_approved: 'Bölüm Başkanı Onayladı',
+      dept_approved: target?.departmentId === 'dept-cas' ? 'IB DP Koordinatörü Onayladı' : 'Bölüm Başkanı Onayladı',
       coordinator_approved: 'Koordinatör Onayladı (Resmi Yayında)',
       revision_needed: 'Revizyon İstendi',
       submitted: 'Onaya Gönderildi',
@@ -663,7 +672,8 @@ export function App() {
     trackActivity('approve_project', 'projects', `Proje onay durumu değiştirildi: "${target?.title || projectId}" (${statusLabels[newStatus] || newStatus})`, { projectId, newStatus, feedback });
 
     if (newStatus === 'dept_approved') {
-      showToast(`${currentUser.name} tarafından onaylandı ve Koordinatöre iletildi.`);
+      const approverTitle = target?.departmentId === 'dept-cas' ? 'IB DP Koordinatörü' : 'Bölüm Başkanı';
+      showToast(`${currentUser.name} (${approverTitle}) tarafından onaylandı ve Sürdürülebilirlik Koordinatörüne iletildi.`);
     } else if (newStatus === 'coordinator_approved') {
       showToast('Proje okul takvimine onaylandı ve yayına alındı!');
     } else if (newStatus === 'revision_needed') {
@@ -862,7 +872,8 @@ export function App() {
 
   const handleDeptHeadSelect = (dept: Department) => {
     setActiveDeptHeadDeptId(dept.id);
-    showToast(`Aktif Bölüm Başkanı: ${dept.headName} (${dept.name})`);
+    const isCas = dept.id === 'dept-cas';
+    showToast(isCas ? `Aktif Yönetici: IB DP Koordinatörü (${dept.headName})` : `Aktif Bölüm Başkanı: ${dept.headName} (${dept.name})`);
   };
 
   const handleTeacherSelect = (teacherId: string) => {
@@ -908,7 +919,10 @@ export function App() {
             if (currentT) showToast(`Danışman Öğretmen: ${currentT.name}`);
           } else if (role === 'dept_head') {
             const currentD = DEPARTMENTS.find(d => d.id === activeDeptHeadDeptId);
-            if (currentD) showToast(`Bölüm Başkanı: ${currentD.headName} (${currentD.name})`);
+            if (currentD) {
+              const isCas = currentD.id === 'dept-cas';
+              showToast(isCas ? `IB DP Koordinatörü: ${currentD.headName}` : `Bölüm Başkanı: ${currentD.headName} (${currentD.name})`);
+            }
           }
         }}
         onDepartmentHeadChange={handleDeptHeadSelect}

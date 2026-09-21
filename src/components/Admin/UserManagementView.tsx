@@ -67,6 +67,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [formCanEditCampus, setFormCanEditCampus] = useState(false);
   const [formCanResetCampus, setFormCanResetCampus] = useState(false);
+  const [formIsCasCoordinator, setFormIsCasCoordinator] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -87,6 +88,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     setCustomAvatarUrl('');
     setFormCanEditCampus(false);
     setFormCanResetCampus(false);
+    setFormIsCasCoordinator(false);
     setFormError(null);
     setIsModalOpen(true);
   };
@@ -104,6 +106,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     setCustomAvatarUrl('');
     setFormCanEditCampus(Boolean(profile.customPermissions?.canEditCampusMetrics));
     setFormCanResetCampus(Boolean(profile.customPermissions?.canResetCampusMetrics));
+    setFormIsCasCoordinator(Boolean(profile.isCasCoordinator));
     setFormError(null);
     setIsModalOpen(true);
   };
@@ -166,15 +169,22 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
         canResetCampusMetrics: formCanResetCampus,
       };
 
+      const defaultTitle = formRole === 'principal' 
+        ? 'Okul Müdürü' 
+        : formRole === 'dept_head' 
+        ? (formDeptId === 'dept-cas' ? 'IB DP Koordinatörü' : 'Bölüm Başkanı') 
+        : (formIsCasCoordinator ? 'Danışman Öğretmen / CAS Koordinatörü' : 'Danışman Öğretmen');
+
       if (editingProfile) {
         await onUpdateProfile(editingProfile.id, {
           name: formName.trim(),
           email,
           role: formRole,
           departmentId: (formRole === 'coordinator' || formRole === 'admin' || formRole === 'principal') ? '' : formDeptId,
-          title: formTitle.trim() || (formRole === 'principal' ? 'Okul Müdürü' : formRole === 'dept_head' ? 'Bölüm Başkanı' : 'Danışman Öğretmen'),
+          title: formTitle.trim() || defaultTitle,
           avatar: formAvatar.trim() || '',
           customPermissions,
+          isCasCoordinator: formIsCasCoordinator,
         });
       } else {
         // E-posta mükerrer kontrolü
@@ -190,10 +200,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           email,
           role: formRole,
           departmentId: (formRole === 'coordinator' || formRole === 'admin' || formRole === 'principal') ? '' : formDeptId,
-          title: formTitle.trim() || (formRole === 'principal' ? 'Okul Müdürü' : formRole === 'dept_head' ? 'Bölüm Başkanı' : 'Danışman Öğretmen'),
+          title: formTitle.trim() || defaultTitle,
           avatar: formAvatar.trim() || '',
           status: 'active',
           customPermissions,
+          isCasCoordinator: formIsCasCoordinator,
         });
       }
 
@@ -482,6 +493,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                                   🌱
                                 </span>
                               )}
+                              {profile.isCasCoordinator && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shrink-0" title="IB CAS Koordinatörü">
+                                  🎯 CAS
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -507,10 +523,17 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                             Koordinatör
                           </span>
                         ) : profile.role === 'dept_head' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                            <Building2 className="w-3 h-3 text-blue-600 shrink-0" />
-                            Bölüm Başkanı
-                          </span>
+                          profile.departmentId === 'dept-cas' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                              <Sparkles className="w-3 h-3 text-amber-600 shrink-0" />
+                              IB DP Koordinatörü
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                              <Building2 className="w-3 h-3 text-blue-600 shrink-0" />
+                              Bölüm Başkanı
+                            </span>
+                          )
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                             <GraduationCap className="w-3 h-3 text-amber-600 shrink-0" />
@@ -780,8 +803,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
                 >
                   <option value="teacher">Danışman Öğretmen</option>
-                  <option value="dept_head">Bölüm Başkanı</option>
-                  <option value="coordinator">Koordinatör</option>
+                  <option value="dept_head">Bölüm Başkanı / IB DP Koordinatörü</option>
+                  <option value="coordinator">Koordinatör (Sürdürülebilirlik)</option>
                   <option value="principal">Okul Müdürü</option>
                 </select>
               </div>
@@ -814,13 +837,33 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   </label>
                   <select
                     value={formDeptId}
-                    onChange={(e) => setFormDeptId(e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormDeptId(val);
+                      if (val === 'dept-cas' && !formTitle.trim()) {
+                        setFormTitle('IB DP Koordinatörü');
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
                   >
                     {DEPARTMENTS.map(d => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
+                      <option key={d.id} value={d.id}>
+                        {d.id === 'dept-cas' ? `★ ${d.name} (IB DP)` : d.name}
+                      </option>
                     ))}
                   </select>
+
+                  {formDeptId === 'dept-cas' && (
+                    <div className="mt-2 p-3 rounded-xl bg-amber-50/90 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block text-amber-950">IB DP Koordinatörlüğü Rolü</span>
+                        <span className="text-[11px] text-amber-800 leading-relaxed">
+                          Bu kullanıcı, CAS adına girilen tüm proje başvurularını tıpkı bölüm başkanları gibi Onay Masası'nda inceleyebilecek ve ön onay verebilecektir.
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -831,7 +874,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder="Örn: Kimya Zümre Başkanı, Sürdürülebilirlik Kulübü Rehberi"
+                  placeholder={formDeptId === 'dept-cas' ? 'IB DP Koordinatörü' : 'Örn: Kimya Zümre Başkanı, Biyoloji Öğretmeni'}
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
                   className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white text-slate-900"
@@ -842,11 +885,32 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
                   <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                  <span>Kişiye Özel Ek Yetkiler (Yeşil Kampüs &amp; Metrikler)</span>
+                  <span>Kişiye Özel Ek Yetkiler ve Görevler</span>
                 </div>
                 <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Bu personele genel rolünden bağımsız olarak Yeşil Kampüs verisi girme veya sıfırlama yetkisi verebilirsiniz.
+                  Personele genel rolünden bağımsız olarak özel ek sorumluluklar ve modül yetkileri atayabilirsiniz.
                 </p>
+
+                {/* CAS Koordinatörü Görevi */}
+                <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/80">
+                  <label className="flex items-start gap-2.5 text-xs text-slate-700 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={formIsCasCoordinator}
+                      onChange={(e) => setFormIsCasCoordinator(e.target.checked)}
+                      className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4 mt-0.5"
+                    />
+                    <div>
+                      <span className="font-bold text-amber-950 flex items-center gap-1.5">
+                        🎯 IB CAS Koordinatörü Görevi
+                      </span>
+                      <p className="text-[11px] text-amber-900/80 leading-normal mt-0.5">
+                        Bu öğretmen yeni proje eklerken kendi tanımlı branş zümresinin yanı sıra <strong>CAS (Creativity, Activity, Service)</strong> seçeneğini de seçebilir. Girilen projeler onay için IB DP Koordinatörüne iletilir.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
                 <div className="space-y-2 pt-1">
                   <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer select-none">
                     <input

@@ -91,23 +91,32 @@ export const ApprovalDesk: React.FC<ApprovalDeskProps> = ({
   };
 
   const currentDept = DEPARTMENTS.find(d => d.id === currentUser.departmentId);
+  const isCasDeptHead = isDeptHead && currentUser.departmentId === 'dept-cas';
 
   return (
     <div className="space-y-5">
       {/* Üst Bilgilendirme Panosu */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-card-soft flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+            isCasDeptHead ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'
+          }`}>
             <CheckSquare className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-              {isDeptHead ? `${currentDept?.name || 'Bölüm'} Onay Masası` : 'Sürdürülebilirlik Onay ve Yetki Masası'}
+              {isCasDeptHead
+                ? 'IB DP & CAS Onay Masası'
+                : isDeptHead 
+                ? `${currentDept?.name || 'Bölüm'} Onay Masası` 
+                : 'Sürdürülebilirlik Onay ve Yetki Masası'}
             </h2>
             <p className="text-xs text-slate-500">
-              {isDeptHead 
+              {isCasDeptHead
+                ? 'CAS Koordinatörlüğü tarafından önerilen proje ve faaliyet başvurularını inceleyip ön onay verin.'
+                : isDeptHead 
                 ? 'Zümrenizdeki danışman öğretmenlerden gelen proje başvurularını değerlendirin.' 
-                : 'Bölüm başkanları tarafından ön onay verilen projeleri nihai olarak onaylayıp okul takvimine alın.'}
+                : 'Bölüm başkanları ve IB DP Koordinatörlüğü tarafından ön onay verilen projeleri nihai olarak onaylayıp okul takvimine alın.'}
             </p>
           </div>
         </div>
@@ -120,17 +129,21 @@ export const ApprovalDesk: React.FC<ApprovalDeskProps> = ({
         </div>
       </div>
 
-      {/* Başvuru Listesi */}
+      {/* Başvuru Kartları */}
       {pendingProjects.length === 0 ? (
-        <div className="bg-white rounded-2xl p-12 text-center border border-slate-200/80 shadow-card-soft">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-3">
-            <ShieldCheck className="w-6 h-6" />
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-card-soft">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-4 border border-emerald-100">
+            <ShieldCheck className="w-8 h-8" />
           </div>
-          <h3 className="text-sm font-bold text-slate-800">Harika! Bekleyen başvuru bulunmuyor.</h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            {isDeptHead 
-              ? 'Zümrenize ait tüm projeler incelendi ve onaylandı.' 
-              : 'Tüm okul genelinde bekleyen onay kalmadı. Yeni başvurular olduğunda burada listelenecektir.'}
+          <h3 className="text-base font-bold text-slate-900">
+            Tüm Başvurular İncelendi
+          </h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 leading-relaxed">
+            {isCasDeptHead
+              ? 'Şu anda onayınızı bekleyen herhangi bir CAS proje veya etkinlik başvurusu bulunmuyor.'
+              : isDeptHead 
+              ? 'Zümrenizden bekleyen başvuru bulunmamaktadır. Yeni başvurular yapıldığında bu masada görüntülenecektir.' 
+              : 'Onay bekleyen başvuru bulunmamaktadır. Tüm projeler güncel ve takvimle senkronizedir.'}
           </p>
         </div>
       ) : (
@@ -139,9 +152,9 @@ export const ApprovalDesk: React.FC<ApprovalDeskProps> = ({
             const dept = DEPARTMENTS.find(d => d.id === project.departmentId);
 
             return (
-              <div
+              <div 
                 key={project.id}
-                className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-card-soft hover:shadow-md transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-5"
+                className="bg-white rounded-2xl border border-slate-200/80 shadow-card-soft p-5 transition-all hover:border-slate-300 flex flex-col lg:flex-row lg:items-center justify-between gap-5"
               >
                 <div className="space-y-3 flex-1">
                   {/* Başlık ve Rozetler */}
@@ -159,7 +172,7 @@ export const ApprovalDesk: React.FC<ApprovalDeskProps> = ({
 
                     {project.status === 'dept_approved' ? (
                       <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-blue-100 text-blue-800">
-                        Bölüm Başkanı Onayladı
+                        {project.departmentId === 'dept-cas' ? 'IB DP Koordinatörü Onayladı' : 'Bölüm Başkanı Onayladı'}
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-100 text-amber-800">

@@ -76,9 +76,10 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
   // Karbon Ayak İzi Analizi
   const carbonAnalysis = calculateCarbonAnalysis(scopedMetrics, activeAcademicYear?.totalStudents || 850);
 
-  const deptsWithCurriculum = DEPARTMENTS.filter(dept => scopedCurriculums.some(c => c.departmentId === dept.id));
+  const academicDepts = DEPARTMENTS.filter(dept => dept.isAcademic !== false);
+  const deptsWithCurriculum = academicDepts.filter(dept => scopedCurriculums.some(c => c.departmentId === dept.id));
   const currDeptsCount = deptsWithCurriculum.length;
-  const missingCurriculumDepts = DEPARTMENTS.filter(d => !scopedCurriculums.some(c => c.departmentId === d.id));
+  const missingCurriculumDepts = academicDepts.filter(d => !scopedCurriculums.some(c => c.departmentId === d.id));
 
   const totalActiveDepts = DEPARTMENTS.filter(dept =>
     scopedProjects.some(p => p.departmentId === dept.id) || scopedCurriculums.some(c => c.departmentId === dept.id)
@@ -86,7 +87,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
 
   const isEcoCommitteeOk = completedProjects.length > 0 || scopedProjects.length > 0;
   const isStudentEngagementOk = totalStudents > 0;
-  const isCurriculumOk = currDeptsCount === DEPARTMENTS.length;
+  const isCurriculumOk = currDeptsCount === academicDepts.length;
   const isResourceTrackingOk = scopedMetrics.length > 0 && (totalElectricityKwh > 0 || totalWaterM3 > 0);
   const isZeroWasteOk = totalRecycledKg > 0;
   const isAnnualReportingOk = (activeAcademicYear !== undefined || scopedProjects.length > 0) && (completedProjects.length > 0 || scopedCurriculums.length > 0);
@@ -101,12 +102,12 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
         : 'Sürdürülebilirlik kurulu karar mekanizmasında onaylanmış proje girişi bekleniyor.',
     },
     {
-      title: `${DEPARTMENTS.length} Akademik Bölümün Müfredat Entegrasyonu`,
+      title: `${academicDepts.length} Akademik Bölümün Müfredat Entegrasyonu`,
       ok: isCurriculumOk,
-      statusText: isCurriculumOk ? `${currDeptsCount}/${DEPARTMENTS.length} Zümre Tamam` : `${currDeptsCount}/${DEPARTMENTS.length} Zümre`,
+      statusText: isCurriculumOk ? `${currDeptsCount}/${academicDepts.length} Zümre Tamam` : `${currDeptsCount}/${academicDepts.length} Zümre`,
       detail: isCurriculumOk
-        ? `Tüm zümrelerin ders planlarına toplam ${scopedCurriculums.length} sürdürülebilirlik kazanımı entegre edildi.`
-        : `${currDeptsCount} zümre giriş yaptı. Kalan ${missingCurriculumDepts.length} zümrenin (${missingCurriculumDepts.map(d => d.code).join(', ')}) kazanım girişi bekleniyor.`,
+        ? `Tüm akademik zümrelerin ders planlarına toplam ${scopedCurriculums.length} sürdürülebilirlik kazanımı entegre edildi.`
+        : `${currDeptsCount} akademik zümre giriş yaptı. Kalan ${missingCurriculumDepts.length} zümrenin (${missingCurriculumDepts.map(d => d.code).join(', ')}) kazanım girişi bekleniyor.`,
     },
     {
       title: 'Öğrenci Temsilciliği ve Gençlik Sürdürülebilirlik Çalışmaları',
@@ -345,13 +346,20 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
                 {DEPARTMENTS.map(dept => {
                   const deptProj = scopedProjects.filter(p => p.departmentId === dept.id).length;
                   const deptCurr = scopedCurriculums.filter(c => c.departmentId === dept.id).length;
-                  const isDeptActive = deptProj > 0 || deptCurr > 0;
+                  const isDeptActive = dept.isAcademic === false ? deptProj > 0 : (deptProj > 0 || deptCurr > 0);
                   return (
                     <tr key={dept.id}>
-                      <td className="p-3 font-semibold text-slate-900">{dept.name}</td>
+                      <td className="p-3 font-semibold text-slate-900">
+                        {dept.name}
+                        {dept.isAcademic === false && (
+                          <span className="ml-1.5 text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-bold border border-amber-200">
+                            IB DP
+                          </span>
+                        )}
+                      </td>
                       <td className="p-3 text-slate-600 font-medium">{dept.headName}</td>
                       <td className="p-3">{deptProj} Proje</td>
-                      <td className="p-3">{deptCurr} Kazanım</td>
+                      <td className="p-3">{dept.isAcademic === false && deptCurr === 0 ? '—' : `${deptCurr} Kazanım`}</td>
                       <td className="p-3 text-right">
                         {isDeptActive ? (
                           <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
