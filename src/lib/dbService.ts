@@ -10,7 +10,8 @@ import {
   query, 
   orderBy,
   onSnapshot,
-  limit
+  limit,
+  arrayUnion
 } from 'firebase/firestore';
 import { signInWithPopup, signOut } from 'firebase/auth';
 import { 
@@ -64,11 +65,37 @@ export const INITIAL_ACADEMIC_YEARS: AcademicYear[] = [
 
 const PROFILES_STORAGE_KEY = 'ecocampus_profiles_v1';
 const PROJECTS_STORAGE_KEY = 'ecocampus_projects_v2';
+const DELETED_PROJECTS_STORAGE_KEY = 'ecocampus_deleted_project_ids_v1';
 const CURRICULUM_STORAGE_KEY = 'ecocampus_curriculums_v2';
 const METRICS_STORAGE_KEY = 'ecocampus_metrics_v2';
 const ACADEMIC_YEARS_STORAGE_KEY = 'ecocampus_academic_years_v1';
 const ROLE_PERMISSIONS_STORAGE_KEY = 'ecocampus_role_permissions_v1';
 const ACTIVITY_LOGS_STORAGE_KEY = 'ecocampus_activity_logs_v1';
+
+function getDeletedProjectIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_PROJECTS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return new Set(parsed);
+      }
+    }
+  } catch (e) {
+    console.error('Error reading local deleted project IDs', e);
+  }
+  return new Set();
+}
+
+function addDeletedProjectId(projectId: string): void {
+  try {
+    const set = getDeletedProjectIds();
+    set.add(projectId);
+    localStorage.setItem(DELETED_PROJECTS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch (e) {
+    console.error('Error saving deleted project ID', e);
+  }
+}
 
 function getLocalActivityLogs(): ActivityLog[] {
   try {
@@ -176,11 +203,12 @@ function saveLocalProfiles(profiles: UserProfile[]): void {
 
 function getLocalProjects(): ProjectEvent[] {
   try {
+    const deleted = getDeletedProjectIds();
     const raw = localStorage.getItem(PROJECTS_STORAGE_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed;
+        return parsed.filter(p => p && p.id && !deleted.has(p.id));
       }
     }
   } catch (e) {
@@ -287,11 +315,16 @@ export const dbService = {
     }
 
     try {
-      // orderBy kaldırıldı: createdAt alanı eksik veya farklı formatta olan projeler de güvenle okunur
+      // Buluttaki silinmiş kayıtları da çek ve yerel kara listeye ekle
+      const deletedIds = await this.syncDeletedRecords();
+
       const snapshot = await getDocs(collection(db, 'projects_events'));
 
       const remoteProjects: ProjectEvent[] = [];
       snapshot.docs.forEach(docSnap => {
+        if (deletedIds.has(docSnap.id)) {
+          return;
+        }
         const data = docSnap.data() as ProjectEvent;
         // Yalnızca geçerli bir başlığı veya bölümü olan gerçek projeleri al (başlıksız boş dokümanları ele)
         if (data && (data.title || data.departmentId)) {
@@ -302,18 +335,6 @@ export const dbService = {
         }
       });
 
-      // Yerelde olup henüz Firestore'a yansımamış geçerli projeleri koru ve otomatik buluta eşitle
-      const remoteIds = new Set(remoteProjects.map(p => p.id));
-      for (const localP of locals) {
-        if (localP.title && !remoteIds.has(localP.id)) {
-          remoteProjects.unshift(localP);
-          const clean = sanitizeFirestoreData(localP);
-          setDoc(doc(db, 'projects_events', localP.id), clean).catch(err => {
-            console.warn('[dbService] Yerel proje buluta aktarılamadı:', err);
-          });
-        }
-      }
-
       // Tarihe göre sırala (en yeni en üstte)
       remoteProjects.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
@@ -321,7 +342,8 @@ export const dbService = {
       return { data: remoteProjects, fromLive: true };
     } catch (err) {
       console.warn('Firebase getProjects fallback to local data:', err);
-      return { data: locals, fromLive: false };
+      const deletedIds = getDeletedProjectIds();
+      return { data: locals.filter(p => !deletedIds.has(p.id)), fromLive: false };
     }
   },
 
@@ -460,15 +482,30 @@ export const dbService = {
 
   // 4.1 PROJE SİL
   async deleteProject(projectId: string): Promise<boolean> {
+    // 1. Silinen kimliği yerel kara listeye (tombstone) ekle
+    addDeletedProjectId(projectId);
+
+    // 2. Yerel bellek ve localStorage'dan derhal temizle
     const locals = getLocalProjects();
     const filtered = locals.filter(p => p.id !== projectId);
     saveLocalProjects(filtered);
 
+    // 3. Buluttan (Firestore) kalıcı olarak sil ve deleted_records dokümanına kaydet
     if (isFirebaseConfigured && db) {
       try {
         await deleteDoc(doc(db, 'projects_events', projectId));
+        try {
+          await setDoc(doc(db, 'system_settings', 'deleted_records'), {
+            projectIds: arrayUnion(projectId),
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+        } catch (subErr) {
+          console.warn('Could not record deleted_records tombstone in Firestore:', subErr);
+        }
+        return true;
       } catch (e) {
         console.error('Firebase deleteProject error:', e);
+        return false;
       }
     }
     return true;
@@ -1056,15 +1093,72 @@ export const dbService = {
     };
   },
 
+  // 12.1 SİLİNMİŞ KAYITLARI EŞİTLE VE DİNLE (TOMBSTONES)
+  async syncDeletedRecords(): Promise<Set<string>> {
+    const localDeleted = getDeletedProjectIds();
+    if (!isFirebaseConfigured || !db) return localDeleted;
+    try {
+      const snap = await getDoc(doc(db, 'system_settings', 'deleted_records'));
+      if (snap.exists()) {
+        const data = snap.data();
+        if (Array.isArray(data.projectIds)) {
+          data.projectIds.forEach((id: string) => {
+            if (typeof id === 'string') localDeleted.add(id);
+          });
+          localStorage.setItem(DELETED_PROJECTS_STORAGE_KEY, JSON.stringify(Array.from(localDeleted)));
+        }
+      }
+    } catch (e) {
+      console.warn('syncDeletedRecords error:', e);
+    }
+    return localDeleted;
+  },
+
+  subscribeToDeletedRecords(callback?: (deletedIds: Set<string>) => void): () => void {
+    if (!isFirebaseConfigured || !db) return () => {};
+    try {
+      return onSnapshot(doc(db, 'system_settings', 'deleted_records'), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (Array.isArray(data.projectIds)) {
+            const currentDeleted = getDeletedProjectIds();
+            let hasNew = false;
+            data.projectIds.forEach((id: string) => {
+              if (typeof id === 'string' && !currentDeleted.has(id)) {
+                currentDeleted.add(id);
+                hasNew = true;
+              }
+            });
+            if (hasNew) {
+              localStorage.setItem(DELETED_PROJECTS_STORAGE_KEY, JSON.stringify(Array.from(currentDeleted)));
+              const locals = getLocalProjects();
+              const cleaned = locals.filter(p => !currentDeleted.has(p.id));
+              if (cleaned.length !== locals.length) {
+                saveLocalProjects(cleaned);
+              }
+              if (callback) callback(currentDeleted);
+            }
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('subscribeToDeletedRecords error:', e);
+      return () => {};
+    }
+  },
+
   // 13. GERÇEK ZAMANLI VERİTABANI DİNLEYİCİLERİ (REAL-TIME SNAPSHOTS)
   subscribeToProjects(callback: (projects: ProjectEvent[], isRemoteUpdate: boolean) => void): () => void {
     if (!isFirebaseConfigured || !db) return () => {};
     let isInitial = true;
     try {
-      // orderBy kaldırıldı: eksik/farklı alan yapısına sahip dokümanlar da dahil tüm liste güvenle gelir
       return onSnapshot(collection(db, 'projects_events'), (snapshot) => {
+        const deletedIds = getDeletedProjectIds();
         const list: ProjectEvent[] = [];
         snapshot.forEach(docSnap => {
+          if (deletedIds.has(docSnap.id)) {
+            return;
+          }
           const data = docSnap.data() as ProjectEvent;
           // Yalnızca geçerli bir başlığı veya bölümü olan projeleri al
           if (data && (data.title || data.departmentId)) {
@@ -1074,19 +1168,6 @@ export const dbService = {
             });
           }
         });
-
-        // Yerelde olup henüz Firestore'a yansımamış geçerli projeleri koru ve otomatik buluta eşitle
-        const locals = getLocalProjects();
-        const remoteIds = new Set(list.map(p => p.id));
-        for (const localP of locals) {
-          if (localP.title && !remoteIds.has(localP.id)) {
-            list.unshift(localP);
-            const clean = sanitizeFirestoreData(localP);
-            setDoc(doc(db, 'projects_events', localP.id), clean).catch(err => {
-              console.warn('[dbService] Yerel proje buluta senkronize edilemedi:', err);
-            });
-          }
-        }
 
         // Tarihe göre sırala (en yeni en üstte)
         list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());

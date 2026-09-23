@@ -11,9 +11,17 @@ service cloud.firestore {
 
     // Okul panosu ve SDG projeleri herkes (ziyaretçiler, veliler, öğrenciler) tarafından görüntülenebilir.
     // Veri ekleme, düzenleme ve silme işlemleri yalnızca @fmvisik.k12.tr kurumsal Google hesabı ile giriş yapmış personele açıktır.
-    match /{document=**} {
+    // Projeler ve Etkinlikler
+    match /projects_events/{projectId} {
       allow read: if true;
-      allow write: if isSchoolStaff();
+      allow create, update: if projectId != 'proj-1790150021117' && isSchoolStaff();
+      allow delete: if isSchoolStaff();
+    }
+
+    // Diğer tüm koleksiyonlar (projeler hariç)
+    match /{collectionName}/{document=**} {
+      allow read: if true;
+      allow write: if collectionName != 'projects_events' && isSchoolStaff();
     }
   }
 }

@@ -342,6 +342,7 @@ export function App() {
     let unsubscribeCurr: (() => void) | undefined;
     let unsubscribeMetrics: (() => void) | undefined;
     let unsubscribePerms: (() => void) | undefined;
+    let unsubscribeDeletedRecords: (() => void) | undefined;
 
     const loadData = async () => {
       // Profilleri çek (Yerel IndexedDB önbelleği veya Firestore)
@@ -439,6 +440,11 @@ export function App() {
             }
           });
 
+          // Silinen Projeler (Tombstones) Dinleyicisi - Tüm sekmelerde ve cihazlarda anında temizler
+          unsubscribeDeletedRecords = dbService.subscribeToDeletedRecords((deletedSet) => {
+            setProjects(prev => prev.filter(p => !deletedSet.has(p.id)));
+          });
+
         } catch (e) {
           console.error('Veri dinleyici hatası:', e);
         }
@@ -453,6 +459,7 @@ export function App() {
       if (unsubscribeCurr) unsubscribeCurr();
       if (unsubscribeMetrics) unsubscribeMetrics();
       if (unsubscribePerms) unsubscribePerms();
+      if (unsubscribeDeletedRecords) unsubscribeDeletedRecords();
       if (liveUpdateTimerRef.current) clearTimeout(liveUpdateTimerRef.current);
     };
   }, []);
@@ -644,9 +651,16 @@ export function App() {
     }
 
     setProjects(prev => prev.filter(p => p.id !== projectId));
-    showToast(`"${title}" başarıyla silindi.`);
-    trackActivity('delete_project', 'projects', `Proje sistemden silindi: "${title}"`, { projectId, title });
-    await dbService.deleteProject(projectId);
+    const success = await dbService.deleteProject(projectId);
+    if (success) {
+      showToast(`"${title}" başarıyla silindi.`);
+      trackActivity('delete_project', 'projects', `Proje sistemden silindi: "${title}"`, { projectId, title });
+    } else {
+      showToast(`"${title}" silinirken bir sorun oluştu. Lütfen bağlantınızı kontrol edin.`);
+      if (target) {
+        setProjects(prev => [target, ...prev]);
+      }
+    }
   };
 
   // 3. Durum Güncelleme (Onay / Revizyon)
