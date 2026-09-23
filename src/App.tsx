@@ -21,6 +21,12 @@ import {
 import { dbService } from './lib/dbService';
 import { isFirebaseConfigured, auth } from './lib/firebase';
 import { pwaManager } from './lib/pwa';
+import {
+  notifyProjectSubmitted,
+  notifyProjectApproved,
+  notifyProjectRevisionNeeded,
+  notifyImpactReportSubmitted
+} from './services/emailNotificationService';
 import { Header } from './components/Layout/Header';
 import { Sidebar } from './components/Layout/Sidebar';
 import { MetricCards } from './components/Dashboard/MetricCards';
@@ -536,6 +542,11 @@ export function App() {
     showToast(`"${newProject.title}" oluşturuldu ve ${approverName}'ne onaya sevk edildi.`);
     trackActivity('create_project', 'projects', `Yeni proje önerildi: "${newProject.title}"`, { projectId: tempId, title: newProject.title, dept: newProject.departmentId });
 
+    // E-posta bildirimi: Proje onaya gönderildiğinde bölüm başkanına bildir
+    if (newProject.status === 'submitted') {
+      notifyProjectSubmitted(newProject, profiles);
+    }
+
     await dbService.createProject({
       ...newProjectData,
       id: tempId
@@ -596,6 +607,18 @@ export function App() {
         ? 'Proje başvurusu güncellendi ve IB DP Koordinatörüne onaya gönderildi.' 
         : 'Proje başvurusu güncellendi ve bölüm başkanına onaya gönderildi.');
       trackActivity('submit_project', 'projects', `Proje onaya sevk edildi: "${target?.title || projectId}"`, { projectId });
+
+      // E-posta bildirimi: Güncellenen proje onaya gönderildiğinde bölüm başkanına bildir
+      if (target) {
+        notifyProjectSubmitted(
+          { 
+            title: updates.title || target.title, 
+            departmentId: updates.departmentId || target.departmentId, 
+            advisorName: updates.advisorName || target.advisorName 
+          },
+          profiles
+        );
+      }
     } else {
       showToast('Proje taslağı başarıyla güncellendi.');
       trackActivity('update_project', 'projects', `Proje taslağı güncellendi: "${target?.title || projectId}"`, { projectId });
@@ -674,10 +697,22 @@ export function App() {
     if (newStatus === 'dept_approved') {
       const approverTitle = target?.departmentId === 'dept-cas' ? 'IB DP Koordinatörü' : 'Bölüm Başkanı';
       showToast(`${currentUser.name} (${approverTitle}) tarafından onaylandı ve Sürdürülebilirlik Koordinatörüne iletildi.`);
+      // E-posta bildirimi: Bölüm başkanı onayladığında danışman öğretmene bildir
+      if (target) {
+        notifyProjectApproved(target, currentUser.name, 'dept_approved', profiles);
+      }
     } else if (newStatus === 'coordinator_approved') {
       showToast('Proje okul takvimine onaylandı ve yayına alındı!');
+      // E-posta bildirimi: Koordinatör onayladığında danışman öğretmene bildir
+      if (target) {
+        notifyProjectApproved(target, currentUser.name, 'coordinator_approved', profiles);
+      }
     } else if (newStatus === 'revision_needed') {
       showToast('Revizyon notu danışman öğretmene iletildi.');
+      // E-posta bildirimi: Revizyon istendiğinde danışman öğretmene bildir
+      if (target) {
+        notifyProjectRevisionNeeded(target, currentUser.name, feedback || '', profiles);
+      }
     }
   };
 
@@ -724,6 +759,11 @@ export function App() {
     await dbService.saveImpactReport(projectId, reportData);
     trackActivity('submit_impact_report', 'projects', `Etkinlik etki ve kapanış raporu tamamlandı: "${target?.title || projectId}"`, { projectId });
     showToast('Etkinlik etki raporu kaydedildi ve arşive eklendi!');
+
+    // E-posta bildirimi: Sonuç raporu girildiğinde koordinatör + bölüm başkanına bildir
+    if (target) {
+      notifyImpactReportSubmitted(target, currentUser.name, profiles);
+    }
   };
 
   // 5. Yeni Müfredat Ekleme
