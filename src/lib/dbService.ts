@@ -244,6 +244,27 @@ function saveLocalCampusMetrics(metrics: CampusMetric[]): void {
   }
 }
 
+/**
+ * Firestore'a yazılacak nesnelerdeki 'undefined' alanları özyinelemeli olarak temizler.
+ * Firebase Firestore'un 'Unsupported field value: undefined' hatasını engeller.
+ */
+export function sanitizeFirestoreData<T>(data: T): any {
+  if (data === null || data === undefined) return null;
+  if (Array.isArray(data)) {
+    return data.map(item => (typeof item === 'object' && item !== null ? sanitizeFirestoreData(item) : item));
+  }
+  if (typeof data === 'object') {
+    const clean: any = {};
+    for (const [k, v] of Object.entries(data as Record<string, any>)) {
+      if (v !== undefined) {
+        clean[k] = typeof v === 'object' && v !== null ? sanitizeFirestoreData(v) : v;
+      }
+    }
+    return clean;
+  }
+  return data;
+}
+
 export const dbService = {
   // Yerel Depolama Senkron Erişimcileri
   getLocalProjects,
@@ -266,20 +287,36 @@ export const dbService = {
     }
 
     try {
-      const q = query(collection(db, 'projects_events'), orderBy('createdAt', 'desc'));
-      const snapshot = await getDocs(q);
+      // orderBy kaldırıldı: createdAt alanı eksik veya farklı formatta olan projeler de güvenle okunur
+      const snapshot = await getDocs(collection(db, 'projects_events'));
 
-      if (snapshot.empty) {
-        saveLocalProjects([]);
-        return { data: [], fromLive: true };
+      const remoteProjects: ProjectEvent[] = [];
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data() as ProjectEvent;
+        // Yalnızca geçerli bir başlığı veya bölümü olan gerçek projeleri al (başlıksız boş dokümanları ele)
+        if (data && (data.title || data.departmentId)) {
+          remoteProjects.push({
+            ...data,
+            id: docSnap.id,
+          });
+        }
+      });
+
+      // Yerelde olup henüz Firestore'a yansımamış geçerli projeleri koru ve otomatik buluta eşitle
+      const remoteIds = new Set(remoteProjects.map(p => p.id));
+      for (const localP of locals) {
+        if (localP.title && !remoteIds.has(localP.id)) {
+          remoteProjects.unshift(localP);
+          const clean = sanitizeFirestoreData(localP);
+          setDoc(doc(db, 'projects_events', localP.id), clean).catch(err => {
+            console.warn('[dbService] Yerel proje buluta aktarılamadı:', err);
+          });
+        }
       }
 
-      const remoteProjects: ProjectEvent[] = snapshot.docs.map(docSnap => ({
-        ...(docSnap.data() as ProjectEvent),
-        id: docSnap.id,
-      }));
+      // Tarihe göre sırala (en yeni en üstte)
+      remoteProjects.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
-      // Canlı Firestore veritabanı aktif ve veri mevcut ise uzak liste esas alınır
       saveLocalProjects(remoteProjects);
       return { data: remoteProjects, fromLive: true };
     } catch (err) {
@@ -289,30 +326,32 @@ export const dbService = {
   },
 
   // 2. YENİ PROJE KAYDET
-  async createProject(project: Omit<ProjectEvent, 'id' | 'createdAt'>): Promise<string> {
-    const tempId = `proj-${Date.now()}`;
+  async createProject(project: Omit<ProjectEvent, 'id' | 'createdAt'> & { id?: string; createdAt?: string }): Promise<string> {
+    const projectId = project.id || `proj-${Date.now()}`;
+    const createdAt = project.createdAt || new Date().toISOString();
     const newProject: ProjectEvent = {
       ...project,
-      id: tempId,
-      createdAt: new Date().toISOString(),
+      id: projectId,
+      createdAt,
     };
 
     // 1. Derhal yerel belleğe ve localStorage'a kaydet (Asla kaybolmaz)
     const locals = getLocalProjects();
-    const updated = [newProject, ...locals.filter(p => p.id !== tempId)];
+    const updated = [newProject, ...locals.filter(p => p.id !== projectId)];
     saveLocalProjects(updated);
 
-    // 2. Firebase Firestore ile arka planda eşitle
+    // 2. Firebase Firestore ile arka planda eşitle (undefined alanlar sanitize edilir)
     if (isFirebaseConfigured && db) {
       try {
-        await setDoc(doc(db, 'projects_events', tempId), newProject);
-        return tempId;
+        const cleanProject = sanitizeFirestoreData(newProject);
+        await setDoc(doc(db, 'projects_events', projectId), cleanProject);
+        return projectId;
       } catch (e) {
         console.error('Firebase createProject error:', e);
       }
     }
 
-    return tempId;
+    return projectId;
   },
 
   // 3. PROJE BİLGİLERİNİ GÜNCELLE (TASLAK DÜZENLEME / REVİZYON)
@@ -328,8 +367,9 @@ export const dbService = {
     // 2. Firebase Firestore ile güvenli (merge: true) eşitle
     if (isFirebaseConfigured && db) {
       try {
+        const cleanUpdates = sanitizeFirestoreData(updates);
         const docRef = doc(db, 'projects_events', projectId);
-        await setDoc(docRef, updates, { merge: true });
+        await setDoc(docRef, cleanUpdates, { merge: true });
         return true;
       } catch (e) {
         console.error('Firebase updateProject error:', e);
@@ -368,7 +408,8 @@ export const dbService = {
         if (feedback !== undefined) {
           updates.rejectionFeedback = feedback;
         }
-        await setDoc(docRef, updates, { merge: true });
+        const cleanUpdates = sanitizeFirestoreData(updates);
+        await setDoc(docRef, cleanUpdates, { merge: true });
         return true;
       } catch (e) {
         console.error('Firebase updateProjectStatus error:', e);
@@ -404,9 +445,10 @@ export const dbService = {
     if (isFirebaseConfigured && db) {
       try {
         const docRef = doc(db, 'projects_events', projectId);
+        const cleanReport = sanitizeFirestoreData(fullReport);
         await setDoc(docRef, {
           status: 'completed',
-          impactReport: fullReport,
+          impactReport: cleanReport,
         }, { merge: true });
         return true;
       } catch (e) {
@@ -469,7 +511,8 @@ export const dbService = {
 
     if (isFirebaseConfigured && db) {
       try {
-        await setDoc(doc(db, 'curriculum_integrations', tempId), newCurr);
+        const cleanCurr = sanitizeFirestoreData(newCurr);
+        await setDoc(doc(db, 'curriculum_integrations', tempId), cleanCurr);
       } catch (e) {
         console.error('Firebase createCurriculum error:', e);
       }
@@ -489,8 +532,9 @@ export const dbService = {
 
     if (isFirebaseConfigured && db) {
       try {
+        const cleanUpdates = sanitizeFirestoreData(updates);
         const docRef = doc(db, 'curriculum_integrations', curriculumId);
-        await setDoc(docRef, updates, { merge: true });
+        await setDoc(docRef, cleanUpdates, { merge: true });
         return true;
       } catch (e) {
         console.error('Firebase updateCurriculum error:', e);
@@ -1017,12 +1061,36 @@ export const dbService = {
     if (!isFirebaseConfigured || !db) return () => {};
     let isInitial = true;
     try {
-      const q = query(collection(db, 'projects_events'), orderBy('createdAt', 'desc'));
-      return onSnapshot(q, (snapshot) => {
+      // orderBy kaldırıldı: eksik/farklı alan yapısına sahip dokümanlar da dahil tüm liste güvenle gelir
+      return onSnapshot(collection(db, 'projects_events'), (snapshot) => {
         const list: ProjectEvent[] = [];
         snapshot.forEach(docSnap => {
-          list.push(docSnap.data() as ProjectEvent);
+          const data = docSnap.data() as ProjectEvent;
+          // Yalnızca geçerli bir başlığı veya bölümü olan projeleri al
+          if (data && (data.title || data.departmentId)) {
+            list.push({
+              ...data,
+              id: docSnap.id,
+            });
+          }
         });
+
+        // Yerelde olup henüz Firestore'a yansımamış geçerli projeleri koru ve otomatik buluta eşitle
+        const locals = getLocalProjects();
+        const remoteIds = new Set(list.map(p => p.id));
+        for (const localP of locals) {
+          if (localP.title && !remoteIds.has(localP.id)) {
+            list.unshift(localP);
+            const clean = sanitizeFirestoreData(localP);
+            setDoc(doc(db, 'projects_events', localP.id), clean).catch(err => {
+              console.warn('[dbService] Yerel proje buluta senkronize edilemedi:', err);
+            });
+          }
+        }
+
+        // Tarihe göre sırala (en yeni en üstte)
+        list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
         saveLocalProjects(list);
         const isRemote = !isInitial && !snapshot.metadata.hasPendingWrites;
         isInitial = false;
