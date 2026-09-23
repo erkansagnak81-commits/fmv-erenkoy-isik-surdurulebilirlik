@@ -22,6 +22,8 @@ interface EmailPayload {
   status?: string;
   feedback?: string;
   appUrl: string;
+  recipientRole?: 'advisor' | 'dept_head' | 'coordinator';
+  advisorName?: string;
 }
 
 /**
@@ -97,32 +99,84 @@ export function notifyProjectSubmitted(
 }
 
 /**
- * 2. Proje onaylandığında → Danışman öğretmene bildirim
+ * 2. Proje onaylandığında bildirim gönder
+ * - Bölüm Başkanı onayladığında (dept_approved) -> Danışman Öğretmene + Genel Koordinatöre bildir
+ * - Genel Koordinatör onayladığında (coordinator_approved) ->
+ *     1. Projeyi oluşturan Danışman Öğretmene (Sonuç raporu hatırlatmasıyla)
+ *     2. Projenin bağlı olduğu Bölüm Başkanına / IB DP Koordinatörüne (Sonuç raporu takip hatırlatmasıyla)
  */
 export function notifyProjectApproved(
-  project: Pick<ProjectEvent, 'title' | 'advisorId' | 'advisorName'>,
+  project: Pick<ProjectEvent, 'title' | 'advisorId' | 'advisorName' | 'departmentId'>,
   approverName: string,
   newStatus: 'dept_approved' | 'coordinator_approved',
   profiles: UserProfile[]
 ): void {
+  const departmentName = getDepartmentName(project.departmentId);
+
   // Danışman öğretmeni ID ile ara, bulunamazsa isimle eşleştir (fallback güvencesi)
   const advisor = profiles.find(p => p.id === project.advisorId)
     || profiles.find(p => p.name.trim().toLowerCase() === project.advisorName?.trim().toLowerCase());
 
-  if (!advisor) {
+  // Projenin bağlı olduğu Bölüm Başkanı veya CAS Koordinatörü
+  const deptReviewer = project.departmentId === 'dept-cas'
+    ? (profiles.find(p => p.role === 'dept_head' && p.departmentId === 'dept-cas') || profiles.find(p => Boolean(p.isCasCoordinator)))
+    : profiles.find(p => p.role === 'dept_head' && p.departmentId === project.departmentId);
+
+  // 1. DANIŞMAN ÖĞRETMENE BİLDİRİM (Sonuç Raporu Giriş Hatırlatması)
+  if (advisor) {
+    sendEmailNotification({
+      action: 'project_approved',
+      recipientEmail: advisor.email,
+      recipientName: advisor.name,
+      projectTitle: project.title,
+      senderName: approverName,
+      departmentName: departmentName,
+      status: newStatus,
+      recipientRole: 'advisor',
+      advisorName: advisor.name,
+      appUrl: APP_URL,
+    });
+  } else {
     console.warn('[EmailNotification] Danışman öğretmen profili bulunamadı:', project.advisorId || project.advisorName);
-    return;
   }
 
-  sendEmailNotification({
-    action: 'project_approved',
-    recipientEmail: advisor.email,
-    recipientName: advisor.name,
-    projectTitle: project.title,
-    senderName: approverName,
-    status: newStatus,
-    appUrl: APP_URL,
-  });
+  // 2. KOORDİNATÖR ONAYINDA -> BÖLÜM BAŞKANINA / IB DP KOORDİNATÖRÜNE BİLDİRİM (Sonuç Raporu Takip Hatırlatması)
+  if (newStatus === 'coordinator_approved' && deptReviewer) {
+    // Mükerrer gönderim önleme: Danışman öğretmen zaten bölüm başkanıysa veya onaylayan kişi kendisiyse tekrar gönderme
+    const isSameAsAdvisor = advisor && deptReviewer.email.toLowerCase() === advisor.email.toLowerCase();
+    const isSameAsApprover = deptReviewer.email.toLowerCase() === 'erkan.sagnak@fmvisik.k12.tr';
+
+    if (!isSameAsAdvisor && !isSameAsApprover) {
+      sendEmailNotification({
+        action: 'project_approved',
+        recipientEmail: deptReviewer.email,
+        recipientName: deptReviewer.name,
+        projectTitle: project.title,
+        senderName: approverName,
+        departmentName: departmentName,
+        status: newStatus,
+        recipientRole: 'dept_head',
+        advisorName: project.advisorName || advisor?.name || 'Zümre Öğretmeni',
+        appUrl: APP_URL,
+      });
+    }
+  }
+
+  // 3. BÖLÜM BAŞKANI ONAYINDA -> GENEL KOORDİNATÖRE BİLDİRİM (Nihai Takvim Onayı Bekleniyor)
+  if (newStatus === 'dept_approved') {
+    const coordinator = profiles.find(p => p.role === 'coordinator');
+    if (coordinator && coordinator.email.toLowerCase() !== deptReviewer?.email.toLowerCase()) {
+      sendEmailNotification({
+        action: 'project_submitted', // Onay masasında bekleyen proje bildirimi
+        recipientEmail: coordinator.email,
+        recipientName: coordinator.name,
+        projectTitle: project.title,
+        senderName: `${approverName} (${departmentName} Bölüm Başkanı Onayladı)`,
+        departmentName: departmentName,
+        appUrl: APP_URL,
+      });
+    }
+  }
 }
 
 /**

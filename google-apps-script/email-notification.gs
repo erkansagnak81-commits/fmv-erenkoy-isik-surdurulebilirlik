@@ -32,6 +32,8 @@ function doPost(e) {
     var status = payload.status || '';
     var feedback = payload.feedback || '';
     var appUrl = payload.appUrl || 'https://sdg-erenkoy.web.app';
+    var recipientRole = payload.recipientRole || 'advisor';
+    var advisorName = payload.advisorName || '';
     
     if (!recipientEmail || !action) {
       return ContentService.createTextOutput(
@@ -52,8 +54,14 @@ function doPost(e) {
         var approvalLabel = status === 'coordinator_approved' 
           ? 'Koordinatör Onayı (Resmi Takvime Alındı)' 
           : 'Bölüm Başkanı Onayı';
-        subject = '✅ Projeniz Onaylandı — ' + projectTitle;
-        htmlBody = buildApprovedEmail(recipientName, senderName, projectTitle, approvalLabel, appUrl);
+        if (status === 'coordinator_approved') {
+          subject = (recipientRole === 'dept_head')
+            ? '📌 Zümre Projesi Takvime Alındı: ' + projectTitle + ' (Sonuç Raporu Takibi)'
+            : '🎉 Projeniz Onaylandı ve Takvime Alındı — ' + projectTitle;
+        } else {
+          subject = '✅ Projeniz Onaylandı — ' + projectTitle;
+        }
+        htmlBody = buildApprovedEmail(recipientName, senderName, projectTitle, approvalLabel, appUrl, recipientRole, advisorName, departmentName);
         break;
         
       case 'project_revision_needed':
@@ -159,23 +167,71 @@ function buildSubmittedEmail(recipientName, senderName, projectTitle, department
 }
 
 /**
- * 2. Proje Onaylandı — Danışman Öğretmene Bildirim
+ * 2. Proje Onaylandı — Danışman Öğretmen ve Bölüm Başkanına Bildirim
  */
-function buildApprovedEmail(recipientName, approverName, projectTitle, approvalLabel, appUrl) {
+function buildApprovedEmail(recipientName, approverName, projectTitle, approvalLabel, appUrl, recipientRole, advisorName, departmentName) {
+  var isCoordinatorApproval = approvalLabel.indexOf('Koordinatör') !== -1;
+  var isDeptHead = recipientRole === 'dept_head';
+
+  var headerGreeting = isDeptHead 
+    ? 'Sayın <strong>' + recipientName + '</strong> (Bölüm Başkanı / Koordinatör),'
+    : 'Sayın <strong>' + recipientName + '</strong>,';
+
+  var introText = '';
+  if (isCoordinatorApproval) {
+    if (isDeptHead) {
+      introText = 'Zümreniz danışman öğretmenlerinden <strong>' + (advisorName || 'ilgili öğretmenimiz') + '</strong> tarafından yürütülen <strong>' + projectTitle + '</strong> başlıklı proje, Sürdürülebilirlik Genel Koordinatörlüğü (' + approverName + ') tarafından incelenmiş ve <strong>resmi olarak onaylanarak okul takvimine / yayına alınmıştır</strong>. 🌿';
+    } else {
+      introText = 'Tebrikler! <strong>' + projectTitle + '</strong> başlıklı projeniz/etkinliğiniz Sürdürülebilirlik Genel Koordinatörlüğü (' + approverName + ') tarafından incelenmiş ve <strong>resmi olarak onaylanarak okul takvimine / yayına alınmıştır</strong>. 🎉';
+    }
+  } else {
+    introText = 'Projeniz bölüm başkanınız (<strong>' + approverName + '</strong>) tarafından onaylanmış ve nihai takvim onayı için Genel Koordinatörlüğe sevk edilmiştir. ✅';
+  }
+
+  // Sonuç Raporu Vurgu Kutusu (Koordinatör Onayı Sonrasında Gösterilir)
+  var reminderBox = '';
+  if (isCoordinatorApproval) {
+    if (isDeptHead) {
+      reminderBox = 
+        '<div style="background-color:#eff6ff;border-radius:12px;border:1px solid #bfdbfe;padding:20px;margin:20px 0;">' +
+        '<p style="color:#1e40af;font-size:15px;font-weight:700;margin:0 0 8px 0;">📊 Süreç Takibi &amp; Sonuç Raporu Hatırlatması</p>' +
+        '<p style="color:#334155;font-size:13px;line-height:1.6;margin:0 0 8px 0;">' +
+        'Etkinlik/proje gerçekleştirildikten sonra, zümrenizin sürdürülebilirlik kazanımlarının okul raporlarına yansıması için danışman öğretmenimiz (<strong>' + (advisorName || 'Danışman Öğretmen') + '</strong>) tarafından platform üzerinden <strong>"Sonuç Raporu"</strong> girilmesi gerekmektedir.' +
+        '</p>' +
+        '<p style="color:#64748b;font-size:12px;margin:0;">Zümre başkanlığı olarak etkinlik sonrası raporlama sürecini takip etmeniz ve öğretmenimize rehberlik etmeniz önemle rica olunur.</p>' +
+        '</div>';
+    } else {
+      reminderBox = 
+        '<div style="background-color:#eff6ff;border-radius:12px;border:1px solid #bfdbfe;padding:20px;margin:20px 0;">' +
+        '<p style="color:#1e40af;font-size:15px;font-weight:700;margin:0 0 8px 0;">📊 Önemli Hatırlatma: Sonuç ve Etki Raporu Girişi</p>' +
+        '<p style="color:#334155;font-size:13px;line-height:1.6;margin:0 0 10px 0;">' +
+        'Projeniz/etkinliğiniz tamamlandığında, okul geneli yeşil kampüs ve akreditasyon metriklerine dahil edilebilmesi için <strong>platform üzerinden "Sonuç Raporu Gir" butonuna tıklayarak sonuç raporunu sisteme girmeniz gerekmektedir:</strong>' +
+        '</p>' +
+        '<ul style="color:#475569;font-size:13px;line-height:1.6;margin:0 0 10px 0;padding-left:20px;">' +
+        '<li>Etkinliğe fiilen katılan gerçek öğrenci ve öğretmen sayısı</li>' +
+        '<li>Elde edilen SKA / Sürdürülebilirlik çıktıları ve kazanımlar</li>' +
+        '<li>Varsa etkinlik fotoğrafları veya belgeleri</li>' +
+        '</ul>' +
+        '<p style="color:#0369a1;font-size:12px;font-weight:600;margin:0;">💡 Sonuç raporu tamamlandığında projeniz "Tamamlanan Projeler Vitrini"nde yerini alacaktır.</p>' +
+        '</div>';
+    }
+  }
+
   var content = 
-    '<p style="color:#334155;font-size:15px;line-height:1.6;margin:0 0 16px 0;">Sayın <strong>' + recipientName + '</strong>,</p>' +
-    '<p style="color:#334155;font-size:15px;line-height:1.6;margin:0 0 20px 0;">' +
-    'Projeniz <strong style="color:#059669;">onaylanmıştır</strong>. Tebrikler! 🎉</p>' +
-    
+    '<p style="color:#334155;font-size:15px;line-height:1.6;margin:0 0 16px 0;">' + headerGreeting + '</p>' +
+    '<p style="color:#334155;font-size:15px;line-height:1.6;margin:0 0 20px 0;">' + introText + '</p>' +
+    reminderBox +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#ecfdf5;border-radius:12px;border:1px solid #a7f3d0;margin:0 0 24px 0;">' +
     '<tr><td style="padding:20px;">' +
-    '<p style="color:#065f46;font-size:16px;font-weight:700;margin:0 0 8px 0;">✅ ' + projectTitle + '</p>' +
+    '<p style="color:#065f46;font-size:16px;font-weight:700;margin:0 0 8px 0;">🌱 ' + projectTitle + '</p>' +
     '<p style="color:#475569;font-size:13px;margin:0 0 4px 0;"><strong>Onay Aşaması:</strong> ' + approvalLabel + '</p>' +
-    '<p style="color:#475569;font-size:13px;margin:0;"><strong>Onaylayan:</strong> ' + approverName + '</p>' +
+    '<p style="color:#475569;font-size:13px;margin:0 0 4px 0;"><strong>Onaylayan:</strong> ' + approverName + '</p>' +
+    (advisorName ? '<p style="color:#475569;font-size:13px;margin:0 0 4px 0;"><strong>Danışman Öğretmen:</strong> ' + advisorName + '</p>' : '') +
+    (departmentName ? '<p style="color:#475569;font-size:13px;margin:0;"><strong>Bölüm / Zümre:</strong> ' + departmentName + '</p>' : '') +
     '</td></tr></table>' +
     
     '<p style="text-align:center;margin:0 0 16px 0;">' +
-    '<a href="' + appUrl + '" target="_blank" style="display:inline-block;background:linear-gradient(135deg,#065f46,#0d9488);color:#ffffff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">Projeyi Görüntüle →</a>' +
+    '<a href="' + appUrl + '" target="_blank" style="display:inline-block;background:linear-gradient(135deg,#065f46,#0d9488);color:#ffffff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">Projeyi ve Detayları Görüntüle →</a>' +
     '</p>';
     
   return getEmailWrapper(content);
