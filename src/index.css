@@ -39,6 +39,10 @@
 }
 
 /* Print styling for Sürdürülebilirlik Portalı */
+#user-manual-print-portal {
+  display: none;
+}
+
 @media print {
   @page {
     size: A4 portrait;
@@ -71,4 +75,18 @@
     break-after: page !important;
     break-inside: avoid !important;
   }
+
+  /* User Manual Print Portal Isolation: Only show manual when printing-manual class is present */
+  body.printing-manual > *:not(#user-manual-print-portal) {
+    display: none !important;
+  }
+  body.printing-manual #user-manual-print-portal {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
 }
+

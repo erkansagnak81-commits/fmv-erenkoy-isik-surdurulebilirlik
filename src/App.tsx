@@ -44,7 +44,9 @@ import { ActivityLogsView } from './components/Admin/ActivityLogsView';
 import { LoginModal } from './components/Auth/LoginModal';
 import { PersonalDashboard } from './components/Dashboard/PersonalDashboard';
 import { SchoolCalendarView } from './components/Calendar/SchoolCalendarView';
-import { Sparkles, CheckCircle2, ArrowRight, GraduationCap } from 'lucide-react';
+import { UserManualModal } from './components/UserManual/UserManualModal';
+import { UserManualPrintable, printUserManual } from './components/UserManual/UserManualPrintable';
+import { Sparkles, CheckCircle2, ArrowRight, GraduationCap, BookOpen, Download } from 'lucide-react';
 
 export function App() {
   // Kayıtlı profiller
@@ -131,6 +133,7 @@ export function App() {
   const [editingProject, setEditingProject] = useState<ProjectEvent | null>(null);
   const [isImpactModalOpen, setIsImpactModalOpen] = useState(false);
   const [selectedProjectForReport, setSelectedProjectForReport] = useState<ProjectEvent | null>(null);
+  const [isUserManualOpen, setIsUserManualOpen] = useState(false);
 
   // PWA & Çevrimiçi / Çevrimdışı Durumu
   const [isOnline, setIsOnline] = useState<boolean>(() => pwaManager.getIsOnline());
@@ -1000,6 +1003,8 @@ export function App() {
         isOnline={isOnline}
         isPwaInstallable={isPwaInstallable}
         onPromptInstall={() => pwaManager.promptInstall()}
+        onOpenUserManual={() => setIsUserManualOpen(true)}
+        onDownloadUserManualPdf={() => printUserManual()}
       />
 
       {/* Ana Gövde */}
@@ -1013,6 +1018,8 @@ export function App() {
           currentUserEmail={currentUser.email}
           currentUser={currentUser}
           rolePermissions={rolePermissions}
+          onOpenUserManual={() => setIsUserManualOpen(true)}
+          onDownloadUserManualPdf={() => printUserManual()}
         />
 
         {/* Ana İçerik Alanı */}
@@ -1033,6 +1040,8 @@ export function App() {
                 onUpdateProjectStatus={handleUpdateProjectStatus}
                 onNavigateTab={(tab) => setCurrentTab(tab)}
                 activeAcademicYear={activeAcademicYear}
+                onOpenUserManual={() => setIsUserManualOpen(true)}
+                onDownloadUserManualPdf={() => printUserManual()}
               />
             ) : (
               <div className="space-y-6">
@@ -1069,10 +1078,26 @@ export function App() {
                     </button>
                     <button
                       onClick={() => setCurrentTab('reports')}
-                      className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-colors backdrop-blur-xs flex items-center gap-1.5"
+                      className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-colors backdrop-blur-xs flex items-center gap-1.5 cursor-pointer"
                     >
                       <span>Yıllık Özeti İncele</span>
                       <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setIsUserManualOpen(true)}
+                      className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-colors backdrop-blur-xs flex items-center gap-1.5 cursor-pointer border border-white/10"
+                      title="Kapsamlı Kullanım Kılavuzu & Teknik Dokümantasyonu Ekranda İnceleyin"
+                    >
+                      <BookOpen className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Kılavuz &amp; Doküman</span>
+                    </button>
+                    <button
+                      onClick={() => printUserManual()}
+                      className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm border border-emerald-400/40"
+                      title="Tek Tuşla Resmi Kullanım Kılavuzunu ve Teknik Dokümanı PDF Olarak İndirin"
+                    >
+                      <Download className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Kılavuz (PDF İndir)</span>
                     </button>
                   </div>
                 </div>
@@ -1234,6 +1259,15 @@ export function App() {
           onSubmit={handleSubmitImpactReport}
         />
       )}
+
+      {/* Kapsamlı Kullanım Kılavuzu & Teknik Dokümantasyon Modalı */}
+      <UserManualModal 
+        isOpen={isUserManualOpen}
+        onClose={() => setIsUserManualOpen(false)}
+      />
+
+      {/* Yazdırma & Tek Tuşla PDF Çıktı Portalı */}
+      <UserManualPrintable />
     </div>
   );
 }

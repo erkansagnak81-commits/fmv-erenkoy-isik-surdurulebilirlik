@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserProfile, UserRole, Department, AcademicYear } from '../../types';
 import { DEPARTMENTS, isSuperAdminEmail } from '../../constants';
-import { Sparkles, UserCheck, LogOut, Camera, GraduationCap, Download, WifiOff, School } from 'lucide-react';
+import { Sparkles, UserCheck, LogOut, Camera, GraduationCap, Download, WifiOff, School, BookOpen } from 'lucide-react';
 import { ProfileModal } from '../Auth/ProfileModal';
 import { AcademicYearModal } from '../Admin/AcademicYearModal';
 
@@ -24,6 +24,8 @@ interface HeaderProps {
   isOnline?: boolean;
   isPwaInstallable?: boolean;
   onPromptInstall?: () => void;
+  onOpenUserManual?: () => void;
+  onDownloadUserManualPdf?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -45,6 +47,8 @@ export const Header: React.FC<HeaderProps> = ({
   isOnline = true,
   isPwaInstallable = false,
   onPromptInstall,
+  onOpenUserManual,
+  onDownloadUserManualPdf,
 }) => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAcademicYearModalOpen, setIsAcademicYearModalOpen] = useState(false);
@@ -150,6 +154,39 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden sm:inline">Uygulamayı Yükle (PWA)</span>
               <span className="sm:hidden">PWA Yükle</span>
             </button>
+          )}
+
+          {/* Kullanım Kılavuzu & Teknik Dokümantasyon Butonu (Tek Tuşla PDF İndirme) */}
+          {onOpenUserManual && (
+            <div className="relative inline-flex items-center rounded-xl bg-gradient-to-r from-emerald-800 to-teal-900 p-0.5 shadow-2xs border border-emerald-700/60">
+              <button
+                type="button"
+                onClick={onOpenUserManual}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-l-lg text-xs font-bold text-white hover:bg-white/10 transition-colors cursor-pointer"
+                title="Kapsamlı Kullanım Kılavuzu & Teknik Dokümantasyonu Ekranda İnceleyin"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-amber-300" />
+                <span className="hidden sm:inline">Kılavuz &amp; Doküman</span>
+                <span className="sm:hidden">Kılavuz</span>
+              </button>
+              <div className="w-[1px] h-4 bg-emerald-600/60 my-auto" />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onDownloadUserManualPdf) {
+                    onDownloadUserManualPdf();
+                  } else {
+                    onOpenUserManual();
+                  }
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-r-lg text-[11px] font-extrabold text-amber-300 hover:text-amber-200 hover:bg-white/15 transition-colors cursor-pointer"
+                title="Tek Tuşla Resmi A4 Formatında PDF Olarak İndir / Yazdır"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>PDF İndir</span>
+              </button>
+            </div>
           )}
 
           {/* Rol Seçici (Yalnızca Erkan Sağnak için Yönetici Önizleme Modu, Diğer Kullanıcılar İçin Sabit Yetki Rozeti) */}
