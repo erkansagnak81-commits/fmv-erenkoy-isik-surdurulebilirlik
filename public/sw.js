@@ -3,7 +3,7 @@
    Gelişmiş PWA Servis Çalışanı (Service Worker) - Unlimited Cache Edition
    ========================================================================== */
 
-const CACHE_VERSION = 'erenkoy-isik-sdg-pwa-v1';
+const CACHE_VERSION = 'erenkoy-isik-sdg-pwa-v2';
 const STATIC_CACHE_NAME = `static-${CACHE_VERSION}`;
 const FONT_CACHE_NAME = `fonts-${CACHE_VERSION}`;
 const RUNTIME_CACHE_NAME = `runtime-${CACHE_VERSION}`;
@@ -64,6 +64,12 @@ self.addEventListener('fetch', (event) => {
 
   // Yalnızca HTTP / HTTPS ve GET isteklerini önbellekle
   if (request.method !== 'GET' || !url.protocol.startsWith('http')) {
+    return;
+  }
+
+  // PDF ve indirilebilir dosyaları servis çalışanından KESİNLİKLE muaf tut:
+  // Tarayıcının yerel indirme yöneticisi (Content-Disposition: attachment) doğrudan devreye girsin.
+  if (url.pathname.endsWith('.pdf') || url.pathname.includes('Kilavuz') || url.pathname.includes('pdf')) {
     return;
   }
 
