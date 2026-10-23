@@ -25,8 +25,6 @@ interface SidebarProps {
   currentUserEmail?: string;
   currentUser?: UserProfile;
   rolePermissions?: SystemRolePermissions;
-  onOpenUserManual?: () => void;
-  onDownloadUserManualPdf?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -37,8 +35,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentUserEmail,
   currentUser,
   rolePermissions,
-  onOpenUserManual,
-  onDownloadUserManualPdf,
 }) => {
   const isSuperAdmin = isSuperAdminEmail(currentUser?.email || currentUserEmail) || userRole === 'admin';
 
@@ -194,40 +190,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Kullanım Kılavuzu & Teknik Doküman (Tek Tuşla PDF İndirme) */}
-        {(onOpenUserManual || onDownloadUserManualPdf) && (
-          <div className="pt-1">
-            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                  Sistem Dokümanı
-                </span>
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                  v2.4
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={onOpenUserManual}
-                  className="w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer shadow-2xs"
-                  title="Kullanım kılavuzunu ekranda inceleyin"
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Kılavuz</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={onDownloadUserManualPdf || onOpenUserManual}
-                  className="w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-bold text-slate-900 bg-amber-400 hover:bg-amber-300 transition-colors cursor-pointer shadow-2xs"
-                  title="Kılavuzu tek tuşla PDF olarak indirin"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>PDF İndir</span>
-                </button>
-              </div>
+        <div className="pt-1">
+          <a
+            href="/FMV_Erenkoy_Isik_Surdurulebilirlik_Kullanim_Kilavuzu.pdf"
+            download="FMV_Erenkoy_Isik_Surdurulebilirlik_Kullanim_Kilavuzu.pdf"
+            className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-800 transition-colors shadow-2xs group cursor-pointer"
+            title="Kullanım kılavuzu ve teknik sistem dokümantasyonunu PDF olarak indir"
+          >
+            <div className="flex items-center gap-2">
+              <Download className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
+              <span>Kılavuz (PDF İndir)</span>
             </div>
-          </div>
-        )}
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+              v2.4
+            </span>
+          </a>
+        </div>
       </div>
     </aside>
   );

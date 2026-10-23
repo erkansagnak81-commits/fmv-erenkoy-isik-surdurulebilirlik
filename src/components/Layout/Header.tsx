@@ -24,8 +24,6 @@ interface HeaderProps {
   isOnline?: boolean;
   isPwaInstallable?: boolean;
   onPromptInstall?: () => void;
-  onOpenUserManual?: () => void;
-  onDownloadUserManualPdf?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -47,8 +45,6 @@ export const Header: React.FC<HeaderProps> = ({
   isOnline = true,
   isPwaInstallable = false,
   onPromptInstall,
-  onOpenUserManual,
-  onDownloadUserManualPdf,
 }) => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAcademicYearModalOpen, setIsAcademicYearModalOpen] = useState(false);
@@ -156,38 +152,17 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Kullanım Kılavuzu & Teknik Dokümantasyon Butonu (Tek Tuşla PDF İndirme) */}
-          {onOpenUserManual && (
-            <div className="relative inline-flex items-center rounded-xl bg-gradient-to-r from-emerald-800 to-teal-900 p-0.5 shadow-2xs border border-emerald-700/60">
-              <button
-                type="button"
-                onClick={onOpenUserManual}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-l-lg text-xs font-bold text-white hover:bg-white/10 transition-colors cursor-pointer"
-                title="Kapsamlı Kullanım Kılavuzu & Teknik Dokümantasyonu Ekranda İnceleyin"
-              >
-                <BookOpen className="w-3.5 h-3.5 text-amber-300" />
-                <span className="hidden sm:inline">Kılavuz &amp; Doküman</span>
-                <span className="sm:hidden">Kılavuz</span>
-              </button>
-              <div className="w-[1px] h-4 bg-emerald-600/60 my-auto" />
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onDownloadUserManualPdf) {
-                    onDownloadUserManualPdf();
-                  } else {
-                    onOpenUserManual();
-                  }
-                }}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-r-lg text-[11px] font-extrabold text-amber-300 hover:text-amber-200 hover:bg-white/15 transition-colors cursor-pointer"
-                title="Tek Tuşla Resmi A4 Formatında PDF Olarak İndir / Yazdır"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>PDF İndir</span>
-              </button>
-            </div>
-          )}
+          {/* Tek Tuşla Kullanım Kılavuzu & Teknik Dokümantasyon PDF İndirme Butonu */}
+          <a
+            href="/FMV_Erenkoy_Isik_Surdurulebilirlik_Kullanim_Kilavuzu.pdf"
+            download="FMV_Erenkoy_Isik_Surdurulebilirlik_Kullanim_Kilavuzu.pdf"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white shadow-xs transition-all cursor-pointer border border-emerald-600/60 hover:scale-[1.02]"
+            title="Kapsamlı Kullanım Kılavuzu ve Teknik Sistem Dokümantasyonunu PDF Olarak İndir"
+          >
+            <Download className="w-3.5 h-3.5 text-amber-300" />
+            <span className="hidden sm:inline">Kılavuz (PDF İndir)</span>
+            <span className="sm:hidden">PDF İndir</span>
+          </a>
 
           {/* Rol Seçici (Yalnızca Erkan Sağnak için Yönetici Önizleme Modu, Diğer Kullanıcılar İçin Sabit Yetki Rozeti) */}
           {isSuperAdmin ? (

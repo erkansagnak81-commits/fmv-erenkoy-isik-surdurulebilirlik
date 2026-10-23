@@ -42,8 +42,6 @@ interface PersonalDashboardProps {
   onNavigateTab: (tab: string) => void;
   activeAcademicYear?: AcademicYear;
   onDeleteProject?: (projectId: string) => void;
-  onOpenUserManual?: () => void;
-  onDownloadUserManualPdf?: () => void;
 }
 
 export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
@@ -59,8 +57,6 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
   onNavigateTab,
   activeAcademicYear,
   onDeleteProject,
-  onOpenUserManual,
-  onDownloadUserManualPdf,
 }) => {
   const currentDept = DEPARTMENTS.find(d => d.id === currentUser.departmentId);
   const isTeacher = currentUser.role === 'teacher';
@@ -297,37 +293,16 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
               <span>Ders Kazanımı Ekle</span>
             </button>
 
-            {/* Kullanım Kılavuzu & Teknik Doküman (Tek Tuşla PDF İndirme) */}
-            {(onDownloadUserManualPdf || onOpenUserManual) && (
-              <div className="inline-flex items-center rounded-xl bg-gradient-to-r from-emerald-600/40 to-teal-700/40 p-0.5 border border-emerald-400/40 shadow-xs">
-                <button
-                  type="button"
-                  onClick={onOpenUserManual}
-                  className="px-3 py-2 rounded-l-lg text-white font-bold text-xs hover:bg-white/15 transition-colors flex items-center gap-1.5 cursor-pointer"
-                  title="Kapsamlı Kullanım Kılavuzu & Teknik Dokümantasyonu Ekranda İnceleyin"
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Kılavuz</span>
-                </button>
-                <div className="w-[1px] h-4 bg-emerald-400/40 my-auto" />
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onDownloadUserManualPdf) {
-                      onDownloadUserManualPdf();
-                    } else if (onOpenUserManual) {
-                      onOpenUserManual();
-                    }
-                  }}
-                  className="px-2.5 py-2 rounded-r-lg text-amber-300 hover:text-amber-200 font-extrabold text-xs hover:bg-white/20 transition-colors flex items-center gap-1 cursor-pointer"
-                  title="Kılavuzu Tek Tuşla Resmi A4 Formatında PDF Olarak İndir / Yazdır"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>PDF İndir</span>
-                </button>
-              </div>
-            )}
+            {/* Tek Tuşla Kullanım Kılavuzu & Teknik Doküman PDF İndirme Butonu */}
+            <a
+              href="/FMV_Erenkoy_Isik_Surdurulebilirlik_Kullanim_Kilavuzu.pdf"
+              download="FMV_Erenkoy_Isik_Surdurulebilirlik_Kullanim_Kilavuzu.pdf"
+              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-extrabold text-xs transition-all border border-emerald-400/40 flex items-center gap-1.5 cursor-pointer shadow-xs hover:scale-[1.02]"
+              title="Kapsamlı Kullanım Kılavuzu ve Teknik Sistem Dokümantasyonunu PDF Olarak İndir"
+            >
+              <Download className="w-4 h-4 text-amber-300" />
+              <span>Kılavuz (PDF İndir)</span>
+            </a>
           </div>
         </div>
       </div>
